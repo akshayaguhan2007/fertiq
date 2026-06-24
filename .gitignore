@@ -1,0 +1,23 @@
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
+# Flutter
+app/.dart_tool/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+
+# Python
+backend/__pycache__/
+backend/.env
+backend/serviceAccountKey.json
+backend/venv/
+
+# Node
+functions/node_modules/
+
+# General
+*.log
+.DS_Store
