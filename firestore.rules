@@ -1,8 +1,48 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    function isAuth() { return request.auth != null; }
+    function isOwner(uid) { return request.auth.uid == uid; }
+
+    // Farmer profile — only the owner
+    match /farmers/{userId} {
+      allow read, write: if isAuth() && isOwner(userId);
+    }
+
+    // Farms — only the farmer who owns it
+    match /farms/{farmId} {
+      allow read, write: if isAuth() && isOwner(resource.data.farmerId);
+      allow create: if isAuth() && isOwner(request.resource.data.farmerId);
+    }
+
+    // Analyses — readable/writable by the farm's owner
+    match /analyses/{analysisId} {
+      allow read, write: if isAuth() &&
+        exists(/databases/$(database)/documents/farms/$(resource.data.farmId)) &&
+        get(/databases/$(database)/documents/farms/$(resource.data.farmId)).data.farmerId == request.auth.uid;
+      allow create: if isAuth() &&
+        get(/databases/$(database)/documents/farms/$(request.resource.data.farmId)).data.farmerId == request.auth.uid;
+    }
+
+    // Carbon credits — only the credited farmer can read/update; Cloud Functions create them
+    match /carbon_credits/{creditId} {
+      allow read: if isAuth() && isOwner(resource.data.farmerId);
+      allow create: if isAuth() && isOwner(request.resource.data.farmerId);
+      allow update: if isAuth() && isOwner(resource.data.farmerId);
+    }
+
+    // Climate alerts — read-only for the farm owner (written by Cloud Functions via Admin SDK)
+    match /climate_alerts/{alertId} {
+      allow read: if isAuth() &&
+        get(/databases/$(database)/documents/farms/$(resource.data.farmId)).data.farmerId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Payments — read-only for the farmer (written by Cloud Functions via Admin SDK)
+    match /payments/{paymentId} {
+      allow read: if isAuth() && isOwner(resource.data.farmerId);
+      allow write: if false;
     }
   }
 }
