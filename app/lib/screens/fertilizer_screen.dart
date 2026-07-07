@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/app_strings.dart';
 import '../services/mock_data.dart';
 import '../theme.dart';
 
@@ -67,7 +68,7 @@ class _FertilizerScreenState extends State<FertilizerScreen> {
     final analysis = MockData.analysis;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Fertilizer Plan')),
+      appBar: AppBar(title: Text(AppStrings.of(context).fertilizerPlanTitle)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -98,15 +99,15 @@ class _FertilizerScreenState extends State<FertilizerScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Target Yield',
-                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: kTextDark)),
+                    Text(AppStrings.of(context).targetYield,
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: kTextDark)),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _yieldCtrl,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*'))],
-                      decoration: const InputDecoration(
-                        labelText: 'Expected yield (tons/ha)',
+                      decoration: InputDecoration(
+                        labelText: AppStrings.of(context).expectedYield,
                         suffixText: 'tons/ha',
                         isDense: true,
                       ),
@@ -117,7 +118,7 @@ class _FertilizerScreenState extends State<FertilizerScreen> {
                       child: ElevatedButton.icon(
                         onPressed: _calculate,
                         icon: const Icon(Icons.calculate_outlined),
-                        label: const Text('CALCULATE FERTILIZER'),
+                        label: Text(AppStrings.of(context).calculateFert),
                       ),
                     ),
                   ],
@@ -156,11 +157,11 @@ class _SoilStatusCard extends StatelessWidget {
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
                       color: kTextGrey, letterSpacing: 1.2)),
               const SizedBox(height: 12),
-              _SoilBar('Nitrogen', soil.n, 80, 'ppm', 'LOW'),
-              _SoilBar('Phosphorus', soil.p, 30, 'ppm', 'OK'),
-              _SoilBar('Potassium', soil.k, 150, 'ppm', 'HIGH'),
-              _SoilBar('pH', soil.ph, 7.0, '', 'IDEAL'),
-              _SoilBar('Moisture', soil.moisture, 50, '%', 'GOOD'),
+              _SoilBar(AppStrings.of(context).nitrogen,   soil.n,        80,  'ppm', 'LOW'),
+              _SoilBar(AppStrings.of(context).phosphorus, soil.p,        30,  'ppm', 'OK'),
+              _SoilBar(AppStrings.of(context).potassium,  soil.k,        150, 'ppm', 'HIGH'),
+              _SoilBar(AppStrings.of(context).ph,         soil.ph,       7.0, '',    'IDEAL'),
+              _SoilBar(AppStrings.of(context).moisture,   soil.moisture, 50,  '%',   'GOOD'),
             ],
           ),
         ),
@@ -239,8 +240,8 @@ class _RecommendationCard extends StatelessWidget {
                 ],
               ),
               const Divider(height: 24),
-              _CostRow('TOTAL COST', '₹${result.cost.round()} per hectare', kTextDark),
-              _CostRow('SAVINGS vs TRADITIONAL', '₹${result.savings.round()}!', kGreenSoft),
+              _CostRow(AppStrings.of(context).totalCost,     '₹${result.cost.round()} per hectare', kTextDark),
+              _CostRow(AppStrings.of(context).savingsVsTrad, '₹${result.savings.round()}!',         kGreenSoft),
             ],
           ),
         ),
@@ -357,18 +358,18 @@ class _ReminderRow extends StatelessWidget {
           Expanded(
             child: OutlinedButton.icon(
               onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Reminder set!'))),
+                  SnackBar(content: Text(AppStrings.of(context).reminderSet))),
               icon: const Icon(Icons.alarm, size: 18),
-              label: const Text('SET REMINDER'),
+              label: Text(AppStrings.of(context).setReminder),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: ElevatedButton.icon(
               onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Marked as done'), backgroundColor: kGreenSoft)),
+                  SnackBar(content: Text(AppStrings.of(context).markedDone), backgroundColor: kGreenSoft)),
               icon: const Icon(Icons.check, size: 18),
-              label: const Text('MARK DONE'),
+              label: Text(AppStrings.of(context).markDone),
             ),
           ),
         ],

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' hide Path;
+import '../services/app_strings.dart';
 import '../services/satellite_service.dart';
 import '../services/gemini_service.dart';
 import '../services/mock_data.dart';
@@ -79,7 +80,7 @@ class _SatelliteAnalysisScreenState extends State<SatelliteAnalysisScreen> {
       _loading  = true;
       _result   = null;
       _recs     = null;
-      _loadStep = 'Fetching Sentinel-2 data…';
+      _loadStep = AppStrings.of(context).fetchingSentinel;
     });
 
     final result = await _satellite.fetchNDVI(
@@ -90,7 +91,7 @@ class _SatelliteAnalysisScreenState extends State<SatelliteAnalysisScreen> {
       endDate:   DateFormat('yyyy-MM-dd').format(_to),
     );
 
-    setState(() => _loadStep = 'Running AI analysis…');
+    setState(() => _loadStep = AppStrings.of(context).runningAI);
 
     final soil = MockData.soilReading;
     final recs = await _gemini.getRecommendations(
@@ -128,7 +129,7 @@ class _SatelliteAnalysisScreenState extends State<SatelliteAnalysisScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('Satellite Analysis',
+        title: Text(AppStrings.of(context).satelliteAnalysis,
             style: GoogleFonts.plusJakartaSans(
                 fontSize: 16, fontWeight: FontWeight.w700, color: kTextDark)),
         leading: Padding(
@@ -229,7 +230,7 @@ class _SatelliteAnalysisScreenState extends State<SatelliteAnalysisScreen> {
                 const Icon(Icons.touch_app_rounded, color: kPrimary, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('Tap map to select farm location',
+                  child: Text(AppStrings.of(context).tapMapToSelect,
                       style: GoogleFonts.plusJakartaSans(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -334,7 +335,7 @@ class _SatelliteAnalysisScreenState extends State<SatelliteAnalysisScreen> {
                 child: ElevatedButton.icon(
                   onPressed: _loading ? null : _fetchData,
                   icon: const Icon(Icons.satellite_alt_rounded, size: 18),
-                  label: const Text('Fetch Satellite Data'),
+                  label: Text(AppStrings.of(context).fetchSatelliteData),
                 ),
               ),
             ),
@@ -484,7 +485,7 @@ class _ResultView extends StatelessWidget {
             Text('${pinned.latitude.toStringAsFixed(4)}, ${pinned.longitude.toStringAsFixed(4)}  ·  Sentinel-2',
                 style: GoogleFonts.plusJakartaSans(fontSize: 12, color: kTextGrey)),
             const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(color: kBorder)),
-            Text('Satellite Metrics',
+            Text(AppStrings.of(context).satelliteMetrics,
                 style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700, color: kTextDark)),
             const SizedBox(height: 14),
             GridView.count(
@@ -510,7 +511,7 @@ class _ResultView extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('NDVI Trend (30 days)',
+            Text(AppStrings.of(context).ndviTrend30,
                 style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700, color: kTextDark)),
             const SizedBox(height: 16),
             SizedBox(height: 110, child: LineChart(LineChartData(
@@ -536,7 +537,7 @@ class _ResultView extends StatelessWidget {
             Row(children: [
               const Icon(Icons.auto_awesome_rounded, color: kAccentGold, size: 16),
               const SizedBox(width: 6),
-              Text('AI Recommendations',
+              Text(AppStrings.of(context).aiRecommendations,
                   style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700, color: kTextDark)),
               const SizedBox(width: 6),
               StatusBadge('AI', kAccentGold),
@@ -551,14 +552,14 @@ class _ResultView extends StatelessWidget {
               Expanded(child: OutlinedButton.icon(
                 onPressed: onRescan,
                 icon: const Icon(Icons.refresh_rounded, size: 16),
-                label: const Text('New Analysis'),
+                label: Text(AppStrings.of(context).newAnalysis),
                 style: OutlinedButton.styleFrom(minimumSize: const Size(0, 50)),
               )),
               const SizedBox(width: 12),
               Expanded(child: ElevatedButton.icon(
                 onPressed: () => context.go('/sell'),
                 icon: const Icon(Icons.sell_rounded, size: 16),
-                label: const Text('Sell Credits'),
+                label: Text(AppStrings.of(context).sellCredits),
                 style: ElevatedButton.styleFrom(minimumSize: const Size(0, 50)),
               )),
             ]),
@@ -610,14 +611,14 @@ class _CarbonCreditBox extends StatelessWidget {
         ),
         child: Column(children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text('Carbon Credits', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700, color: kTextDark)),
-            StatusBadge('ELIGIBLE', kPrimary),
+            Text(AppStrings.of(context).carbonCreditsBox, style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700, color: kTextDark)),
+            StatusBadge(AppStrings.of(context).eligible, kPrimary),
           ]),
           const SizedBox(height: 12),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             _CreditStat(result.carbonCredits.toStringAsFixed(2), 'tons CO₂e'),
             Container(width: 1, height: 36, color: kBorder),
-            _CreditStat('₹${result.farmerPayment.toStringAsFixed(0)}', 'Your payout (90%)'),
+            _CreditStat(result.farmerPayment.toStringAsFixed(0).contains('₹') ? result.farmerPayment.toStringAsFixed(0) : '₹${result.farmerPayment.toStringAsFixed(0)}', AppStrings.of(context).yourPayout),
           ]),
         ]),
       );

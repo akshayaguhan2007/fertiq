@@ -35,6 +35,7 @@ class _ProfileBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppStrings.of(context);
     return StreamBuilder<List<CarbonCredit>>(
       stream: FirestoreService.instance.carbonCreditsStream(),
       builder: (context, credSnap) {
@@ -58,23 +59,23 @@ class _ProfileBody extends StatelessWidget {
                 child: Column(children: [
                   _ProfileHeader(farmer: farmer, earned: earned),
                   const SizedBox(height: 8),
-                  _StatsRow(farm: farm, earned: earned, totalCarbon: totalCarbon),
+                  _StatsRow(farm: farm, earned: earned, totalCarbon: totalCarbon, t: t),
                   const SizedBox(height: 16),
-                  if (farm != null) _FarmCard(farm: farm),
+                  if (farm != null) _FarmCard(farm: farm, t: t),
                   const SizedBox(height: 8),
-                  ProfileMenuRow(icon: Icons.agriculture_outlined, text: 'My Farms', press: () => context.go('/dashboard')),
-                  ProfileMenuRow(icon: Icons.map_outlined, text: 'Draw Farm Boundary', press: () => context.go('/boundary')),
-                  ProfileMenuRow(icon: Icons.eco_outlined, text: 'Carbon Credits', press: () => context.go('/carbon')),
-                  ProfileMenuRow(icon: Icons.sensors_outlined, text: 'Sensor Settings', press: () => context.go('/sensors')),
+                  ProfileMenuRow(icon: Icons.agriculture_outlined, text: t.myFarms, press: () => context.go('/dashboard')),
+                  ProfileMenuRow(icon: Icons.map_outlined, text: t.drawFarmBoundary, press: () => context.go('/boundary')),
+                  ProfileMenuRow(icon: Icons.eco_outlined, text: t.carbonCredits, press: () => context.go('/carbon')),
+                  ProfileMenuRow(icon: Icons.sensors_outlined, text: t.sensorSettings, press: () => context.go('/sensors')),
                   _LanguageTile(),
-                  ProfileMenuRow(icon: Icons.notifications_outlined, text: 'Notifications', press: () {}),
-                  ProfileMenuRow(icon: Icons.help_outline_rounded, text: 'Help & Support', press: () {}),
-                  ProfileMenuRow(icon: Icons.share_outlined, text: 'Share App', press: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shared! 📤')));
+                  ProfileMenuRow(icon: Icons.notifications_outlined, text: t.notifications, press: () {}),
+                  ProfileMenuRow(icon: Icons.help_outline_rounded, text: t.helpSupport, press: () {}),
+                  ProfileMenuRow(icon: Icons.share_outlined, text: t.shareApp, press: () {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.sharedApp)));
                   }),
                   ProfileMenuRow(
                     icon: Icons.logout_rounded,
-                    text: 'Log Out',
+                    text: t.logout,
                     press: () async {
                       await AuthService.instance.signOut();
                       if (context.mounted) context.go('/login');
@@ -172,7 +173,8 @@ class _StatsRow extends StatelessWidget {
   final Farm? farm;
   final double earned;
   final double totalCarbon;
-  const _StatsRow({required this.farm, required this.earned, required this.totalCarbon});
+  final AppStrings t;
+  const _StatsRow({required this.farm, required this.earned, required this.totalCarbon, required this.t});
 
   @override
   Widget build(BuildContext context) => Container(
@@ -185,13 +187,13 @@ class _StatsRow extends StatelessWidget {
           boxShadow: kShadowSm,
         ),
         child: Row(children: [
-          _StatCell(farm != null ? '1' : '0', 'Farms', kPrimary),
+          _StatCell(farm != null ? '1' : '0', t.farms, kPrimary),
           _Divider(),
-          _StatCell(farm != null ? '${farm!.area} ha' : '0 ha', 'Area', kAccentBlue),
+          _StatCell(farm != null ? '${farm!.area} ha' : '0 ha', t.area, kAccentBlue),
           _Divider(),
-          _StatCell('${totalCarbon.toStringAsFixed(1)}t', 'Carbon', kGreenSoft),
+          _StatCell('${totalCarbon.toStringAsFixed(1)}t', t.carbon, kGreenSoft),
           _Divider(),
-          _StatCell('₹${earned.round()}', 'Earned', kAccentGold),
+          _StatCell('₹${earned.round()}', t.earned, kAccentGold),
         ]),
       );
 }
@@ -219,7 +221,8 @@ class _Divider extends StatelessWidget {
 
 class _FarmCard extends StatelessWidget {
   final Farm farm;
-  const _FarmCard({required this.farm});
+  final AppStrings t;
+  const _FarmCard({required this.farm, required this.t});
 
   @override
   Widget build(BuildContext context) => Container(
@@ -251,7 +254,7 @@ class _FarmCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text('${farm.name}  ·  ${farm.area} ha',                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
                     const Spacer(),
-                    StatusBadge('Active', kGreenSoft),
+                    StatusBadge(t.active, kGreenSoft),
                   ]),
                 ),
               ]),
@@ -260,9 +263,9 @@ class _FarmCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(14),
               child: Row(children: [
-                _FarmDetail('Crop', farm.crops.join(', ')),
-                _FarmDetail('Stage', '-'),
-                _FarmDetail('Health', '0%'),
+                _FarmDetail(t.farmCrop, farm.crops.join(', ')),
+                _FarmDetail(t.farmStage, '-'),
+                _FarmDetail(t.farmHealth, '0%'),
               ]),
             ),
           ]),

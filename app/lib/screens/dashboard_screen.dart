@@ -6,6 +6,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../models/farmer.dart';
 import '../services/firestore_service.dart';
 import '../services/sensor_service.dart';
+import '../services/app_strings.dart';
 import '../widgets/premium_widgets.dart';
 import '../theme.dart';
 
@@ -25,7 +26,8 @@ class DashboardScreen extends StatelessWidget {
             final eligible  = credits.where((c) => c.status == 'eligible').fold(0.0, (s, c) => s + c.amount);
             final earned    = credits.where((c) => c.status == 'sold').fold(0.0, (s, c) => s + (c.salePrice ?? 0));
             final hour      = DateTime.now().hour;
-            final greeting  = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+            final t         = AppStrings.of(context);
+            final greeting  = hour < 12 ? t.goodMorning : hour < 17 ? t.goodAfternoon : t.goodEvening;
 
             return Scaffold(
               body: GradientBackground(
@@ -108,7 +110,7 @@ class _Header extends StatelessWidget {
                   const Icon(Icons.search_rounded, color: kTextGrey, size: 18),
                   const SizedBox(width: 10),
                   Expanded(child: Text(
-                      farmer != null ? '$greeting, ${farmer!.name.split(' ').first}' : 'Search farm data…',
+                      farmer != null ? '$greeting, ${farmer!.name.split(' ').first}' : AppStrings.of(context).searchFarmData,
                       style: GoogleFonts.plusJakartaSans(fontSize: 13, color: kTextGrey))),
                   Container(
                     padding: const EdgeInsets.all(6),
@@ -158,7 +160,8 @@ class _LiveHeroBannerState extends State<_LiveHeroBanner> {
     final score     = _data?.healthScore ?? 0.0;
     final connected = _data?.source == 'hardware';
     final color     = !connected ? kTextGrey : score > 70 ? kPrimary : score > 40 ? kAmber : kRed;
-    final label     = !connected ? 'Not Connected' : score > 70 ? 'Healthy' : score > 40 ? 'Moderate' : 'Stressed';
+    final t         = AppStrings.of(context);
+    final label     = !connected ? t.notConnected : score > 70 ? t.healthy : score > 40 ? t.moderate : t.stressed;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 4, 20, 0),
@@ -196,16 +199,16 @@ class _LiveHeroBannerState extends State<_LiveHeroBanner> {
                   ],
                 ]),
                 const SizedBox(height: 8),
-                Text('Crop Health', style: GoogleFonts.plusJakartaSans(
+                Text(AppStrings.of(context).cropHealth, style: GoogleFonts.plusJakartaSans(
                     color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500)),
                 Text(connected ? '${score.round()}/100' : '--/100',
                     style: GoogleFonts.plusJakartaSans(
                         color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900, height: 1.1)),
                 const SizedBox(height: 12),
                 Row(children: [
-                  _BannerStat('₹${widget.earned.toStringAsFixed(0)}', 'Earned'),
+                  _BannerStat('₹${widget.earned.toStringAsFixed(0)}', AppStrings.of(context).earned),
                   const SizedBox(width: 20),
-                  _BannerStat(widget.credits.toStringAsFixed(1), 'Credits'),
+                  _BannerStat(widget.credits.toStringAsFixed(1), AppStrings.of(context).credits),
                   const Spacer(),
                   GestureDetector(
                     onTap: () => context.go('/sell'),
@@ -213,7 +216,7 @@ class _LiveHeroBannerState extends State<_LiveHeroBanner> {
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
                           color: kPrimary, borderRadius: BorderRadius.circular(10)),
-                      child: Text('Sell →', style: GoogleFonts.plusJakartaSans(
+                      child: Text(AppStrings.of(context).sell, style: GoogleFonts.plusJakartaSans(
                           color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
                     ),
                   ),
@@ -242,44 +245,48 @@ class _BannerStat extends StatelessWidget {
 // ── Categories ────────────────────────────────────────────────────────────────
 
 class _Categories extends StatelessWidget {
-  static const _cats = [
-    (Icons.satellite_alt_rounded, 'Satellite',  '/scan',       kPrimary),
-    (Icons.sensors_rounded,       'Sensors',    '/sensors',    kAccentBlue),
-    (Icons.grass_rounded,         'Fertilizer', '/fertilizer', kAccentGold),
-    (Icons.cloud_outlined,        'Climate',    '/climate',    Color(0xFF8B5CF6)),
-    (Icons.camera_alt_rounded,    'Camera',     '/camera',     Color(0xFFEC4899)),
-    (Icons.bar_chart_rounded,     'Reports',    '/reports',    Color(0xFF10B981)),
-  ];
-
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: _cats.map((c) => _CatTile(c, context)).toList(),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final t = AppStrings.of(context);
+    final cats = [
+      (Icons.satellite_alt_rounded, t.satellite,    '/scan',       kPrimary),
+      (Icons.sensors_rounded,       t.sensors,      '/sensors',    kAccentBlue),
+      (Icons.grass_rounded,         t.fertilizerCat,'/fertilizer', kAccentGold),
+      (Icons.cloud_outlined,        t.climate,      '/climate',    const Color(0xFF8B5CF6)),
+      (Icons.camera_alt_rounded,    t.cameraAnalysis,'/camera',    const Color(0xFFEC4899)),
+      (Icons.bar_chart_rounded,     t.reports,      '/reports',    const Color(0xFF10B981)),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: cats.map((c) => _CatTile(c.$1, c.$2, c.$3, c.$4, context)).toList(),
+      ),
+    );
+  }
 }
 
 class _CatTile extends StatelessWidget {
-  final dynamic cat;
+  final IconData icon;
+  final String label, route;
+  final Color color;
   final BuildContext ctx;
-  const _CatTile(this.cat, this.ctx);
+  const _CatTile(this.icon, this.label, this.route, this.color, this.ctx);
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-        onTap: () => ctx.go(cat.$3 as String),
+        onTap: () => ctx.go(route),
         child: Column(children: [
           Container(
             width: 50, height: 50,
             decoration: BoxDecoration(
-              color: (cat.$4 as Color).withValues(alpha: 0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(cat.$1 as IconData, color: cat.$4 as Color, size: 22),
+            child: Icon(icon, color: color, size: 22),
           ),
           const SizedBox(height: 5),
-          Text(cat.$2 as String, style: GoogleFonts.plusJakartaSans(
+          Text(label, style: GoogleFonts.plusJakartaSans(
               fontSize: 10, fontWeight: FontWeight.w600, color: kTextMid)),
         ]),
       );
@@ -288,22 +295,24 @@ class _CatTile extends StatelessWidget {
 // ── Insight Cards (horizontal scroll) ────────────────────────────────────────
 
 class _InsightCards extends StatelessWidget {
-  static const _cards = [
-    _InsightData('Carbon Report',   '59.3 t C/ha',   'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=90', '/carbon'),
-    _InsightData('Fertilizer Plan', 'N deficit 44%', 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&q=90', '/fertilizer'),
-    _InsightData('Climate Risk',    '30% Moderate',  'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&q=90', '/climate'),
-  ];
-
   @override
-  Widget build(BuildContext context) => SizedBox(
-        height: 120,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.only(left: 20),
-          itemCount: _cards.length,
-          itemBuilder: (context, idx) => _InsightCard(card: _cards[idx]),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final t = AppStrings.of(context);
+    final cards = [
+      _InsightData(t.carbonReport,   '59.3 t C/ha',   'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=90', '/carbon'),
+      _InsightData(t.fertilizerPlan, 'N deficit 44%', 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&q=90', '/fertilizer'),
+      _InsightData(t.climateRisk,    '30% Moderate',  'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&q=90', '/climate'),
+    ];
+    return SizedBox(
+      height: 120,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.only(left: 20),
+        itemCount: cards.length,
+        itemBuilder: (context, idx) => _InsightCard(card: cards[idx]),
+      ),
+    );
+  }
 }
 
 class _InsightData {
@@ -392,7 +401,7 @@ class _AlertsSectionState extends State<_AlertsSection> {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text('Alerts', style: GoogleFonts.plusJakartaSans(
+          Text(AppStrings.of(context).alerts, style: GoogleFonts.plusJakartaSans(
               fontSize: 17, fontWeight: FontWeight.w700, color: kTextDark)),
           const SizedBox(width: 8),
           StatusBadge('${alerts.length}', kRed),
@@ -480,7 +489,7 @@ class _LiveSoilStatsRowState extends State<_LiveSoilStatsRow> {
               child: Row(children: [
                 const Icon(Icons.wifi_off_rounded, color: kTextGrey, size: 14),
                 const SizedBox(width: 6),
-                Text('Sensor not connected', style: GoogleFonts.plusJakartaSans(
+                Text(AppStrings.of(context).sensorNotConnected, style: GoogleFonts.plusJakartaSans(
                     fontSize: 12, color: kTextGrey)),
               ]),
             ),
@@ -572,7 +581,7 @@ class _NdviChartState extends State<_NdviChart> {
             Row(children: [
               const Icon(Icons.wifi_off_rounded, color: kTextGrey, size: 14),
               const SizedBox(width: 4),
-              Text('No data', style: GoogleFonts.plusJakartaSans(
+              Text(AppStrings.of(context).noSensorData, style: GoogleFonts.plusJakartaSans(
                   color: kTextGrey, fontSize: 12)),
             ]),
           ] else ...[
@@ -583,7 +592,7 @@ class _NdviChartState extends State<_NdviChart> {
               child: Row(children: [
                 const Icon(Icons.sensors_rounded, color: kPrimary, size: 14),
                 const SizedBox(width: 4),
-                Text('Live', style: GoogleFonts.plusJakartaSans(
+                Text(AppStrings.of(context).live, style: GoogleFonts.plusJakartaSans(
                     color: kPrimary, fontSize: 12, fontWeight: FontWeight.w700)),
               ]),
             ),
@@ -672,7 +681,7 @@ class _TipCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('AI TIP OF THE DAY', style: GoogleFonts.plusJakartaSans(
+                    Text(AppStrings.of(context).aiTipOfTheDay, style: GoogleFonts.plusJakartaSans(
                         fontSize: 10, fontWeight: FontWeight.w700,
                         color: Colors.white60, letterSpacing: 1)),
                     const SizedBox(height: 4),
@@ -763,7 +772,7 @@ class _NotificationsSheet extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Notifications', style: GoogleFonts.plusJakartaSans(
+                Text(AppStrings.of(context).notifications, style: GoogleFonts.plusJakartaSans(
                     fontSize: 17, fontWeight: FontWeight.w700, color: kTextDark)),
                 StatusBadge('${_notifData.length}', kPrimary),
               ],

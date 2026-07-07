@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../services/app_strings.dart';
 import '../services/mock_data.dart';
 import '../theme.dart';
 
@@ -64,7 +65,7 @@ class _SellCarbonScreenState extends State<SellCarbonScreen> {
     final offers = MockData.marketOffers;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sell Carbon')),
+      appBar: AppBar(title: Text(AppStrings.of(context).sellCarbonTitle)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -86,8 +87,8 @@ class _SellCarbonScreenState extends State<SellCarbonScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('YOUR ELIGIBLE CREDITS',
-                          style: TextStyle(color: Colors.white70, fontSize: 11,
+                      Text(AppStrings.of(context).sellCredits,
+                          style: const TextStyle(color: Colors.white70, fontSize: 11,
                               fontWeight: FontWeight.w600, letterSpacing: 1)),
                       Text('${eligibleCredits.toStringAsFixed(1)} tons CO₂e',
                           style: const TextStyle(color: Colors.white, fontSize: 22,
@@ -98,8 +99,8 @@ class _SellCarbonScreenState extends State<SellCarbonScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text('CURRENT OFFERS',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+            Text(AppStrings.of(context).eligible,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
                     color: kTextGrey, letterSpacing: 1.2)),
             const SizedBox(height: 10),
             ...offers.map((o) => _OfferCard(offer: o, credits: eligibleCredits, onSell: () => _sell(o))),
@@ -107,7 +108,7 @@ class _SellCarbonScreenState extends State<SellCarbonScreen> {
             ElevatedButton.icon(
               onPressed: () => _sell(offers.last),
               icon: const Icon(Icons.workspace_premium_rounded),
-              label: const Text('Sell All to Best Buyer'),
+              label: Text(AppStrings.of(context).sell),
               style: ElevatedButton.styleFrom(
                 backgroundColor: kGreenSoft,
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -224,7 +225,7 @@ class _PaymentSuccessScreen extends StatelessWidget {
     final date    = DateFormat('MMMM d, yyyy').format(DateTime.now());
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Payment Received')),
+      appBar: AppBar(title: Text(AppStrings.of(context).payment)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -244,8 +245,8 @@ class _PaymentSuccessScreen extends StatelessWidget {
                 children: [
                   const Icon(Icons.check_circle_rounded, color: Colors.white, size: 48),
                   const SizedBox(height: 8),
-                  const Text('PAYMENT RECEIVED',
-                      style: TextStyle(color: Colors.white70, fontSize: 13,
+                  Text(AppStrings.of(context).certificate,
+                      style: const TextStyle(color: Colors.white70, fontSize: 13,
                           fontWeight: FontWeight.w600, letterSpacing: 1)),
                   const SizedBox(height: 6),
                   Text('₹$total',
@@ -284,7 +285,7 @@ class _PaymentSuccessScreen extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: () {},
                     icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                    label: const Text('Certificate'),
+                    label: Text(AppStrings.of(context).certificate),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -292,7 +293,7 @@ class _PaymentSuccessScreen extends StatelessWidget {
                   child: ElevatedButton.icon(
                     onPressed: () {},
                     icon: const Icon(Icons.share_outlined, size: 16),
-                    label: const Text('Share'),
+                    label: Text(AppStrings.of(context).share),
                   ),
                 ),
               ],

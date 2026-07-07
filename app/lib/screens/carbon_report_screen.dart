@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
+import '../services/app_strings.dart';
 import '../services/mock_data.dart';
 import '../services/pdf_service.dart';
 import '../theme.dart';
@@ -16,7 +17,7 @@ class CarbonReportScreen extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     try {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Generating certificate…'), duration: Duration(seconds: 2)),
+        SnackBar(content: Text(AppStrings.of(context).generatingCert), duration: const Duration(seconds: 2)),
       );
       final bytes = await PdfService.instance.generateCertificate(
         farmerName: MockData.farmer.name,
@@ -103,7 +104,7 @@ class CarbonReportScreen extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: () => _downloadCertificate(context),
                   icon: const Icon(Icons.download_rounded, size: 18),
-                  label: const Text('Certificate'),
+                  label: Text(AppStrings.of(context).certificate),
                 ),
               ),
               const SizedBox(width: 12),
@@ -111,7 +112,7 @@ class CarbonReportScreen extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: () => context.go('/sell'),
                   icon: const Icon(Icons.sell_rounded, size: 18),
-                  label: const Text('Sell Credits'),
+                  label: Text(AppStrings.of(context).sellCarbonCredits),
                 ),
               ),
             ]),
@@ -142,14 +143,14 @@ class _SummarySection extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            StatusBadge('Verified', kPrimary),
+            StatusBadge(AppStrings.of(context).verified, kPrimary),
             const Spacer(),
             Text(DateFormat('MMM yyyy').format(DateTime.now()),
 
                 style: GoogleFonts.plusJakartaSans(fontSize: 12, color: kTextGrey)),
           ]),
           const SizedBox(height: 10),
-          Text('Carbon Report', style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w800, color: kTextDark)),
+          Text(AppStrings.of(context).carbonReport, style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w800, color: kTextDark)),
           const SizedBox(height: 4),
           Text('${MockData.farm.name}  ·  ${MockData.farm.area} ha  ·  Tanjavur, TN',
               style: GoogleFonts.plusJakartaSans(fontSize: 13, color: kTextGrey)),
@@ -191,23 +192,23 @@ class _CreditsCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text('Carbon Credits', style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700, color: kTextDark)),
-          StatusBadge('ELIGIBLE', kAccentGold),
+          Text(AppStrings.of(context).carbonCreditsBox, style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700, color: kTextDark)),
+          StatusBadge(AppStrings.of(context).eligible, kAccentGold),
         ]),
         const SizedBox(height: 16),
-        _CreditLine('Baseline (5 yrs ago)', '${MockData.baselineCarbon} t C', kTextGrey),
-        _CreditLine('Current',              '${MockData.currentCarbon} t C',  kTextMid),
-        _CreditLine('Additional',           '${MockData.additionalCarbon} t C', kPrimary),
+        _CreditLine(AppStrings.of(context).baseline,   '${MockData.baselineCarbon} t C',  kTextGrey),
+        _CreditLine(AppStrings.of(context).current,    '${MockData.currentCarbon} t C',   kTextMid),
+        _CreditLine(AppStrings.of(context).additional, '${MockData.additionalCarbon} t C', kPrimary),
         const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(color: kBorder)),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text('Best rate', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: kTextGrey)),
+          Text(AppStrings.of(context).bestRate, style: GoogleFonts.plusJakartaSans(fontSize: 13, color: kTextGrey)),
           Text('₹3,600 / credit', style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w700, color: kAccentGold)),
         ]),
         const SizedBox(height: 12),
         Container(
           width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(color: kPrimaryLight, borderRadius: BorderRadius.circular(12)),
-          child: Text('You can earn  ₹$value',
+          child: Text('${AppStrings.of(context).youCanEarn}  ₹$value',
               textAlign: TextAlign.center,
               style: GoogleFonts.plusJakartaSans(fontSize: 17, fontWeight: FontWeight.w800, color: kPrimary)),
         ),
@@ -239,7 +240,7 @@ class _TrendChart extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text('5-Year Trend', style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700, color: kTextDark)),
+          Text(AppStrings.of(context).fiveYearTrend, style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700, color: kTextDark)),
           Row(children: [
             const Icon(Icons.trending_up_rounded, color: kPrimary, size: 14),
             const SizedBox(width: 4),
@@ -285,11 +286,11 @@ class _StabilityCard extends StatelessWidget {
   Widget build(BuildContext context) => GlassCard(
         padding: const EdgeInsets.all(18),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Carbon Stability', style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700, color: kTextDark)),
+          Text(AppStrings.of(context).carbonStability, style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700, color: kTextDark)),
           const SizedBox(height: 16),
-          _BarRow('5+ year permanence', MockData.carbonStability / 100, '${MockData.carbonStability.round()}%', kPrimary),
+          _BarRow(AppStrings.of(context).permanence,     MockData.carbonStability / 100, '${MockData.carbonStability.round()}%', kPrimary),
           const SizedBox(height: 12),
-          _BarRow('Microbial health', MockData.microbialHealth / 100, '${MockData.microbialHealth.round()}%', kAccentBlue),
+          _BarRow(AppStrings.of(context).microbialHealth, MockData.microbialHealth / 100, '${MockData.microbialHealth.round()}%', kAccentBlue),
         ]),
       );
 }
@@ -327,7 +328,7 @@ class _ImpactCard extends StatelessWidget {
           border: Border.all(color: kBorder),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Environmental Impact', style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700, color: kTextDark)),
+          Text(AppStrings.of(context).envImpact, style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700, color: kTextDark)),
           const SizedBox(height: 14),
           Row(children: [
             _ImpactTile('🚗', '47', 'Cars off road\nper year', kAccentBlue),

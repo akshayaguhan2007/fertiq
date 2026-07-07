@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../models/farmer.dart';
+import '../services/app_strings.dart';
 import '../services/mock_data.dart';
 import '../theme.dart';
 
@@ -34,7 +35,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Reports & History'),
+        title: Text(AppStrings.of(context).reportsTitle),
         automaticallyImplyLeading: false,
         backgroundColor: kPrimary,
         foregroundColor: Colors.white,
@@ -43,11 +44,11 @@ class _ReportsScreenState extends State<ReportsScreen>
           indicatorColor: Colors.white,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
-          tabs: const [
-            Tab(text: 'Analyses'),
-            Tab(text: 'Carbon'),
-            Tab(text: 'Credits'),
-            Tab(text: 'Seasonal'),
+          tabs: [
+            Tab(text: AppStrings.of(context).satellite),
+            Tab(text: AppStrings.of(context).carbon),
+            Tab(text: AppStrings.of(context).credits),
+            Tab(text: AppStrings.of(context).navReports),
           ],
         ),
       ),
@@ -413,7 +414,7 @@ class _SeasonalTab extends StatelessWidget {
               child: const Icon(Icons.compare_arrows_rounded, color: kPrimary, size: 36),
             ),
             const SizedBox(height: 20),
-            Text('Seasonal Comparison',
+                  Text(AppStrings.of(context).seasonalComparison,
                 style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700, color: kTextDark)),
             const SizedBox(height: 8),
             Text('Compare this season vs last season\nfor NDVI, Yield, Carbon & Soil Health.',

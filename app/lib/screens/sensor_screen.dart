@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/api_service.dart';
+import '../services/app_strings.dart';
 import '../theme.dart';
 
 class SensorScreen extends StatefulWidget {
@@ -29,7 +30,7 @@ class _SensorScreenState extends State<SensorScreen> {
     return Scaffold(
       backgroundColor: kBg,
       appBar: AppBar(
-        title: const Text('Soil Sensors'),
+        title: Text(AppStrings.of(context).soilSensors),
         actions: [
           IconButton(
             icon: AnimatedRotation(
@@ -55,12 +56,11 @@ class _SensorScreenState extends State<SensorScreen> {
                       const SizedBox(height: 16),
                       _HealthHeader(result: _result!),
                       const SizedBox(height: 16),
-                      _SectionTitle('NPK Sensor'),
+                      _SectionTitle('${AppStrings.of(context).nitrogen.replaceAll(' (N)', '')} (NPK)'),
                       const SizedBox(height: 10),
                       _NpkRow(result: _result!),
                       const SizedBox(height: 16),
-                      _SectionTitle('4-in-1 Sensor'),
-                      const SizedBox(height: 10),
+                      _SectionTitle('4-in-1 Sensor'),                      const SizedBox(height: 10),
                       _EnvGrid(result: _result!),
                       const SizedBox(height: 16),
                       _CarbonBanner(result: _result!),
@@ -85,7 +85,7 @@ class _EmptyState extends StatelessWidget {
           children: [
             Icon(Icons.sensors_off_rounded, size: 56, color: kTextGrey.withValues(alpha: 0.4)),
             const SizedBox(height: 16),
-            Text('No sensor data', style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w600, color: kTextGrey)),
+            Text(AppStrings.of(context).noData, style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w600, color: kTextGrey)),
             const SizedBox(height: 6),
             Text('Make sure the Raspberry Pi is online', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: kTextLight)),
             const SizedBox(height: 20),
@@ -465,7 +465,7 @@ class _RecsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Recommendations',
+            Text(AppStrings.of(context).recommendations,
                 style: GoogleFonts.plusJakartaSans(
                     fontSize: 14, fontWeight: FontWeight.w700, color: kTextDark)),
             const SizedBox(height: 14),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/app_strings.dart';
 import '../services/mock_data.dart';
 import '../theme.dart';
 
@@ -13,7 +14,7 @@ class ClimateScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Climate Risk'),
+        title: Text(AppStrings.of(context).climateRiskTitle),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: () {}),
         ],
@@ -68,7 +69,7 @@ class ClimateScreen extends StatelessWidget {
                     onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Added to calendar'))),
                     icon: const Icon(Icons.calendar_today, size: 16),
-                    label: const Text('ADD TO CALENDAR'),
+                    label: Text(AppStrings.of(context).addToCalendar),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -112,7 +113,7 @@ class _OverallRiskCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('OVERALL RISK',
+              Text(AppStrings.of(context).overallRisk,
                   style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w700, letterSpacing: 1)),
               Text('${risk.round()}% ($label)',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
@@ -139,9 +140,9 @@ class _RiskCard extends StatelessWidget {
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
                       color: kTextGrey, letterSpacing: 1.2)),
               const SizedBox(height: 14),
-              _RiskBar('Drought Risk', drought, Icons.wb_sunny_outlined),
-              _RiskBar('Flood Risk', flood, Icons.waves_outlined),
-              _RiskBar('Heat Stress', heat, Icons.thermostat_outlined),
+              _RiskBar(AppStrings.of(context).droughtRisk, drought, Icons.wb_sunny_outlined),
+              _RiskBar(AppStrings.of(context).floodRisk,   flood,   Icons.waves_outlined),
+              _RiskBar(AppStrings.of(context).heatStress,  heat,    Icons.thermostat_outlined),
             ],
           ),
         ),
@@ -220,14 +221,16 @@ class _ForecastTable extends StatelessWidget {
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
                     color: kTextGrey, letterSpacing: 1.2)),
             const SizedBox(height: 12),
-            // Header
-            _TableRow('Day', 'Temp', 'Rain', 'Moist', 'Risk', isHeader: true),
+            _TableRow(
+              AppStrings.of(context).day, AppStrings.of(context).temp,
+              AppStrings.of(context).rain, AppStrings.of(context).moist,
+              AppStrings.of(context).risk, isHeader: true),
             const Divider(height: 8),
             ...days.asMap().entries.map((e) {
               final d     = e.value;
               final color = d.risk == 'High' ? kRed : d.risk == 'Med' ? kAmber : kGreenSoft;
               return _TableRow(
-                'Day ${e.key + 1}',
+                '${AppStrings.of(context).day} ${e.key + 1}',
                 '${d.temp}°C',
                 '${d.rain}mm',
                 '${d.moisture}%',
@@ -292,16 +295,13 @@ class _AlertBox extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-              const Text('HEAT STRESS ALERT: Day 5–6',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: kAmber)),
+              Text(AppStrings.of(context).heatAlert,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: kAmber)),
             const SizedBox(height: 8),
-            ...const [
-              '• Apply light irrigation on Day 4',
-              '• Avoid fertilizer during heat wave',
-              '• Consider early morning irrigation',
-            ].map((t) => Padding(
+            ...[AppStrings.of(context).heatAlertTip1, AppStrings.of(context).heatAlertTip2, AppStrings.of(context).heatAlertTip3]
+                .map((tip) => Padding(
                   padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(t, style: const TextStyle(fontSize: 13, color: kTextDark)),
+                  child: Text(tip, style: const TextStyle(fontSize: 13, color: kTextDark)),
                 )),
           ],
         ),
