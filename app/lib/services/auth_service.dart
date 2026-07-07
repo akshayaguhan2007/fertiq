@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-const String kApiBase = 'http://localhost:8000'; // web/Windows desktop
+const String kApiBase = 'http://10.186.32.104:8000'; // real device — PC WiFi IP
 // Android emulator → use http://10.0.2.2:8000
 // Real Android device → use http://10.186.32.104:8000
 
