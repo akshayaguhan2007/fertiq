@@ -130,7 +130,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<String>(
-                value: _lang,
+                initialValue: _lang,
                 decoration: InputDecoration(
                   labelText: 'Preferred Language',
                   prefixIcon: const Icon(Icons.language, color: kGreen),

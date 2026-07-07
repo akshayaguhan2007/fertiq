@@ -516,8 +516,9 @@ class _SoilBox extends StatelessWidget {
           child: Column(children: [
             Text(value, style: GoogleFonts.plusJakartaSans(
                 fontSize: 18, fontWeight: FontWeight.w800, color: color)),
-            if (unit.isNotEmpty)
+            if (unit.isNotEmpty) ...[
               Text(unit, style: GoogleFonts.plusJakartaSans(fontSize: 9, color: kTextGrey)),
+            ],
             const SizedBox(height: 2),
             Text(label, style: GoogleFonts.plusJakartaSans(
                 fontSize: 10, fontWeight: FontWeight.w600, color: kTextGrey)),
@@ -543,10 +544,12 @@ class _NdviChartState extends State<_NdviChart> {
     super.initState();
     _svc.startPolling(intervalSeconds: 30);
     _svc.stream.listen((d) {
-      if (mounted) setState(() {
-        _ndvi      = d.ndviProxy;
-        _connected = d.source == 'hardware';
-      });
+      if (mounted) {
+        setState(() {
+          _ndvi      = d.ndviProxy;
+          _connected = d.source == 'hardware';
+        });
+      }
     });
   }
 
@@ -565,14 +568,14 @@ class _NdviChartState extends State<_NdviChart> {
           Text(_connected ? 'NDVI: ${_ndvi.toStringAsFixed(2)}' : 'NDVI: --',
               style: GoogleFonts.plusJakartaSans(
                   fontSize: 15, fontWeight: FontWeight.w700, color: kTextDark)),
-          if (!_connected)
+          if (!_connected) ...[
             Row(children: [
               const Icon(Icons.wifi_off_rounded, color: kTextGrey, size: 14),
               const SizedBox(width: 4),
               Text('No data', style: GoogleFonts.plusJakartaSans(
                   color: kTextGrey, fontSize: 12)),
-            ])
-          else
+            ]),
+          ] else ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -584,6 +587,7 @@ class _NdviChartState extends State<_NdviChart> {
                     color: kPrimary, fontSize: 12, fontWeight: FontWeight.w700)),
               ]),
             ),
+          ],
         ]),
         const SizedBox(height: 14),
         SizedBox(

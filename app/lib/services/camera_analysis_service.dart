@@ -48,10 +48,15 @@ class CameraAnalysisService {
       final b = bytes[i + 2];
       totalSamples++;
 
-      if (_isGreen(r, g, b))  { greenCount++; }
-      else if (_isYellow(r, g, b)) { yellowCount++; }
-      else if (_isBrown(r, g, b))  { brownCount++; }
-      else if (_isPurple(r, g, b)) { purpleCount++; }
+      if (_isGreen(r, g, b)) {
+        greenCount++;
+      } else if (_isYellow(r, g, b)) {
+        yellowCount++;
+      } else if (_isBrown(r, g, b)) {
+        brownCount++;
+      } else if (_isPurple(r, g, b)) {
+        purpleCount++;
+      }
     }
 
     if (totalSamples == 0) totalSamples = 1;
@@ -68,22 +73,39 @@ class CameraAnalysisService {
     // ── Dominant colour ───────────────────────────────────────────────────────
     final maxVal = [green, yellow, brown, purple].reduce(max);
     String leafColor;
-    if (maxVal == green)       leafColor = 'Green';
-    else if (maxVal == yellow) leafColor = 'Yellow-Green';
-    else if (maxVal == brown)  leafColor = 'Brown';
-    else                       leafColor = 'Purple-Red';
+    if (maxVal == green) {
+      leafColor = 'Green';
+    } else if (maxVal == yellow) {
+      leafColor = 'Yellow-Green';
+    } else if (maxVal == brown) {
+      leafColor = 'Brown';
+    } else {
+      leafColor = 'Purple-Red';
+    }
 
     // ── Deficiency detection ──────────────────────────────────────────────────
     final deficiencies = <String>[];
-    if (yellow > 20) { deficiencies.add('Nitrogen deficiency (pale/yellow leaves)'); }
-    if (purple > 10) { deficiencies.add('Phosphorus deficiency (purple/red leaves)'); }
-    if (brown  > 15) { deficiencies.add('Potassium deficiency (brown leaf tips)'); }
+    if (yellow > 20) {
+      deficiencies.add('Nitrogen deficiency (pale/yellow leaves)');
+    }
+    if (purple > 10) {
+      deficiencies.add('Phosphorus deficiency (purple/red leaves)');
+    }
+    if (brown > 15) {
+      deficiencies.add('Potassium deficiency (brown leaf tips)');
+    }
 
     // ── Disease detection ─────────────────────────────────────────────────────
     final diseases = <String>[];
-    if (brown > 25 && yellow > 10) { diseases.add('Possible blight detected'); }
-    if (brown > 20 && purple > 5)  { diseases.add('Possible rust infection'); }
-    if (yellow > 30 && green < 30) { diseases.add('Possible mosaic virus / chlorosis'); }
+    if (brown > 25 && yellow > 10) {
+      diseases.add('Possible blight detected');
+    }
+    if (brown > 20 && purple > 5) {
+      diseases.add('Possible rust infection');
+    }
+    if (yellow > 30 && green < 30) {
+      diseases.add('Possible mosaic virus / chlorosis');
+    }
 
     // ── Recommendations ───────────────────────────────────────────────────────
     final recs = <String>[];
