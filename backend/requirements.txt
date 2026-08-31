@@ -1,8 +1,6 @@
-earthengine-api>=0.1.390
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 python-dotenv>=1.0.0
 pydantic>=2.6.0
-pyserial>=3.5
 requests>=2.31.0
 pymongo>=4.6.0
