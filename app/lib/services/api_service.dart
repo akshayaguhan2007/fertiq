@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 
 /// Base URL of your FastAPI backend.
-const String kApiBase = 'http://localhost:8000';
+const String kApiBase = 'https://carbon-tech-backend.up.railway.app'; // production
 
 class ApiService {
   final String _base;

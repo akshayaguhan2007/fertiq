@@ -156,13 +156,13 @@ class _DiffCard extends StatelessWidget {
           border: Border.all(color: kBorder),
           boxShadow: kShadowSm,
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           Row(children: [
             Icon(meta.icon, color: _color, size: 16),
             const SizedBox(width: 6),
             Text(meta.label, style: GoogleFonts.plusJakartaSans(fontSize: 11, color: kTextGrey)),
           ]),
-          const Spacer(),
+          const SizedBox(height: 6),
           Text(meta.value,
               style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800, color: kTextDark)),
           const SizedBox(height: 2),
