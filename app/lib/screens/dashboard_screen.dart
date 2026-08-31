@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:http/http.dart' as http;
 import '../models/farmer.dart';
+import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/sensor_service.dart';
 import '../services/app_strings.dart';
@@ -148,7 +151,7 @@ class _LiveHeroBannerState extends State<_LiveHeroBanner> {
   @override
   void initState() {
     super.initState();
-    _svc.startPolling(intervalSeconds: 30);
+    _svc.startPolling();
     _svc.stream.listen((d) { if (mounted) setState(() => _data = d); });
   }
 
@@ -159,20 +162,22 @@ class _LiveHeroBannerState extends State<_LiveHeroBanner> {
   Widget build(BuildContext context) {
     final score     = _data?.healthScore ?? 0.0;
     final connected = _data?.source == 'hardware';
-    final color     = !connected ? kTextGrey : score > 70 ? kPrimary : score > 40 ? kAmber : kRed;
+    final isLast    = _data?.source == 'last';
+    final color     = !connected && !isLast ? kTextGrey : score > 70 ? kPrimary : score > 40 ? kAmber : kRed;
     final t         = AppStrings.of(context);
-    final label     = !connected ? t.notConnected : score > 70 ? t.healthy : score > 40 ? t.moderate : t.stressed;
+    final label     = (!connected && !isLast) ? t.notConnected : score > 70 ? t.healthy : score > 40 ? t.moderate : t.stressed;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-      height: 170,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         boxShadow: kShadowMd,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(22),
-        child: Stack(fit: StackFit.expand, children: [
+        child: AspectRatio(
+          aspectRatio: 2.4,
+          child: Stack(fit: StackFit.expand, children: [
           CachedNetworkImage(
             imageUrl: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=700&q=80',
             fit: BoxFit.cover,
@@ -186,25 +191,44 @@ class _LiveHeroBannerState extends State<_LiveHeroBanner> {
             ),
           )),
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Row(children: [
                   StatusBadge(label, color),
-                  if (!connected) ...[
+                  if (isLast) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.history_rounded, color: Colors.white70, size: 11),
+                        const SizedBox(width: 3),
+                        Text('Last reading', style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ] else if (!connected) ...[
                     const SizedBox(width: 8),
                     const Icon(Icons.wifi_off_rounded, color: Colors.white54, size: 14),
                   ],
                 ]),
-                const SizedBox(height: 8),
+                const SizedBox(height: 2),
                 Text(AppStrings.of(context).cropHealth, style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w500)),
-                Text(connected ? '${score.round()}/100' : '--/100',
-                    style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900, height: 1.1)),
-                const SizedBox(height: 12),
+                    color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w500)),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text((connected || isLast) ? '${score.round()}/100' : '--/100',
+                      style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, height: 1.1)),
+                ),
+                const SizedBox(height: 4),
                 Row(children: [
                   _BannerStat('₹${widget.earned.toStringAsFixed(0)}', AppStrings.of(context).earned),
                   const SizedBox(width: 20),
@@ -225,6 +249,7 @@ class _LiveHeroBannerState extends State<_LiveHeroBanner> {
             ),
           ),
         ]),
+        ),
       ),
     );
   }
@@ -256,10 +281,10 @@ class _Categories extends StatelessWidget {
       (Icons.camera_alt_rounded,    t.cameraAnalysis,'/camera',    const Color(0xFFEC4899)),
       (Icons.bar_chart_rounded,     t.reports,      '/reports',    const Color(0xFF10B981)),
     ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: cats.map((c) => _CatTile(c.$1, c.$2, c.$3, c.$4, context)).toList(),
       ),
     );
@@ -276,32 +301,58 @@ class _CatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GestureDetector(
         onTap: () => ctx.go(route),
-        child: Column(children: [
-          Container(
-            width: 50, height: 50,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
+        child: Container(
+          margin: const EdgeInsets.only(right: 14),
+          child: Column(children: [
+            Container(
+              width: 42, height: 42,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 18),
             ),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(height: 5),
-          Text(label, style: GoogleFonts.plusJakartaSans(
-              fontSize: 10, fontWeight: FontWeight.w600, color: kTextMid)),
-        ]),
+            const SizedBox(height: 4),
+            SizedBox(
+              width: 52,
+              child: Text(label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 9, fontWeight: FontWeight.w600, color: kTextMid)),
+            ),
+          ]),
+        ),
       );
 }
 
 // ── Insight Cards (horizontal scroll) ────────────────────────────────────────
 
-class _InsightCards extends StatelessWidget {
+class _InsightCards extends StatefulWidget {
+  @override
+  State<_InsightCards> createState() => _InsightCardsState();
+}
+
+class _InsightCardsState extends State<_InsightCards> {
+  final _svc = SensorService();
+  LiveSensorData? _data;
+
+  @override
+  void initState() {
+    super.initState();
+    _svc.fetchOnce().then((d) { if (mounted) setState(() => _data = d); _svc.dispose(); });
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.of(context);
+    final carbon = _data != null ? '${_data!.carbon.toStringAsFixed(2)} t C/ha' : '-- t C/ha';
+    final nStatus = _data == null ? '--' : _data!.n < 40 ? 'N LOW ${_data!.n.round()} ppm' : 'N OK ${_data!.n.round()} ppm';
     final cards = [
-      _InsightData(t.carbonReport,   '59.3 t C/ha',   'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=90', '/carbon'),
-      _InsightData(t.fertilizerPlan, 'N deficit 44%', 'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&q=90', '/fertilizer'),
-      _InsightData(t.climateRisk,    '30% Moderate',  'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&q=90', '/climate'),
+      _InsightData(t.carbonReport,   carbon,    'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=90', '/carbon'),
+      _InsightData(t.fertilizerPlan, nStatus,   'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&q=90', '/fertilizer'),
+      _InsightData(t.climateRisk,    'Live Data','https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&q=90', '/climate'),
     ];
     return SizedBox(
       height: 120,
@@ -380,7 +431,7 @@ class _AlertsSectionState extends State<_AlertsSection> {
   @override
   void initState() {
     super.initState();
-    _svc.startPolling(intervalSeconds: 30);
+    _svc.startPolling();
     _svc.stream.listen((d) { if (mounted) setState(() => _alerts = d.alerts); });
   }
 
@@ -463,7 +514,7 @@ class _LiveSoilStatsRowState extends State<_LiveSoilStatsRow> {
   @override
   void initState() {
     super.initState();
-    _svc.startPolling(intervalSeconds: 30);
+    _svc.startPolling();
     _svc.stream.listen((d) { if (mounted) setState(() => _data = d); });
   }
 
@@ -472,18 +523,30 @@ class _LiveSoilStatsRowState extends State<_LiveSoilStatsRow> {
 
   @override
   Widget build(BuildContext context) {
-    final connected = _data?.source == 'hardware';
-    final n  = connected ? _data!.n  : 0.0;
-    final ph = connected ? _data!.ph : 0.0;
-    final ec = connected ? _data!.ec : 0.0;
-    final m  = connected ? _data!.moisture : 0.0;
+    final isLive = _data?.source == 'hardware';
+    final isLast = _data?.source == 'last';
+    final hasData = isLive || isLast;
+    final n  = hasData ? _data!.n  : 0.0;
+    final ph = hasData ? _data!.ph : 0.0;
+    final ec = hasData ? _data!.ec : 0.0;
+    final m  = hasData ? _data!.moisture : 0.0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!connected)
+          if (isLast)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(children: [
+                const Icon(Icons.history_rounded, color: kTextGrey, size: 14),
+                const SizedBox(width: 6),
+                Text('Sensor offline — showing last reading', style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, color: kTextGrey)),
+              ]),
+            )
+          else if (!isLive)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(children: [
@@ -516,7 +579,7 @@ class _SoilBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Expanded(
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 10),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(14),
@@ -545,21 +608,43 @@ class _NdviChart extends StatefulWidget {
 
 class _NdviChartState extends State<_NdviChart> {
   final _svc = SensorService();
+  List<double> _ndviHistory = [];
   double _ndvi = 0;
   bool _connected = false;
+  String _source = '';
 
   @override
   void initState() {
     super.initState();
-    _svc.startPolling(intervalSeconds: 30);
+    _load();
+  }
+
+  Future<void> _load() async {
+    _svc.startPolling();
     _svc.stream.listen((d) {
       if (mounted) {
         setState(() {
           _ndvi      = d.ndviProxy;
-          _connected = d.source == 'hardware';
+          _source    = d.source;
+          _connected = d.source == 'hardware' || d.source == 'last';
         });
       }
     });
+    // Fetch history for chart
+    try {
+      final res = await http.get(
+        Uri.parse('$kApiBase/sensor/history?limit=7'),
+        headers: {'Authorization': 'Bearer ${AuthService.instance.token}'},
+      ).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 200 && mounted) {
+        final list = (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+        setState(() {
+          _ndviHistory = list.reversed
+              .map((r) => (r['ndvi_proxy'] as num?)?.toDouble() ?? 0)
+              .toList();
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -567,8 +652,12 @@ class _NdviChartState extends State<_NdviChart> {
 
   @override
   Widget build(BuildContext context) {
-    final spots = List.generate(7, (i) =>
-        FlSpot(i.toDouble(), _connected ? _ndvi * (0.5 + i * 0.08) : 0));
+    final isLast = _source == 'last';
+    final spots = _ndviHistory.isNotEmpty
+        ? _ndviHistory.asMap().entries
+            .map((e) => FlSpot(e.key.toDouble(), e.value))
+            .toList()
+        : List.generate(7, (i) => FlSpot(i.toDouble(), _connected ? _ndvi * (0.5 + i * 0.08) : 0));
 
     return GlassCard(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
@@ -582,6 +671,13 @@ class _NdviChartState extends State<_NdviChart> {
               const Icon(Icons.wifi_off_rounded, color: kTextGrey, size: 14),
               const SizedBox(width: 4),
               Text(AppStrings.of(context).noSensorData, style: GoogleFonts.plusJakartaSans(
+                  color: kTextGrey, fontSize: 12)),
+            ]),
+          ] else if (isLast) ...[
+            Row(children: [
+              const Icon(Icons.history_rounded, color: kTextGrey, size: 14),
+              const SizedBox(width: 4),
+              Text('Last reading', style: GoogleFonts.plusJakartaSans(
                   color: kTextGrey, fontSize: 12)),
             ]),
           ] else ...[
@@ -638,7 +734,42 @@ class _NdviChartState extends State<_NdviChart> {
 
 // ── Tip Card ──────────────────────────────────────────────────────────────────
 
-class _TipCard extends StatelessWidget {
+class _TipCard extends StatefulWidget {
+  @override
+  State<_TipCard> createState() => _TipCardState();
+}
+
+class _TipCardState extends State<_TipCard> {
+  final _svc = SensorService();
+  String _tip = 'Loading sensor data…';
+
+  @override
+  void initState() {
+    super.initState();
+    _svc.fetchOnce().then((d) {
+      if (!mounted) return;
+      String tip;
+      if (d.source == 'disconnected') {
+        tip = 'Connect your sensor to get personalised soil tips.';
+      } else if (d.n < 40) {
+        tip = 'Nitrogen LOW (${d.n.round()} ppm) — apply Urea to boost crop health.';
+      } else if (d.moisture < 20) {
+        tip = 'Soil moisture LOW (${d.moisture.round()}%) — irrigate soon to avoid stress.';
+      } else if (d.ph < 6.0) {
+        tip = 'pH too acidic (${d.ph.toStringAsFixed(1)}) — apply agricultural lime.';
+      } else if (d.ph > 7.5) {
+        tip = 'pH alkaline (${d.ph.toStringAsFixed(1)}) — apply gypsum or sulfur.';
+      } else {
+        tip = 'Soil health ${d.healthScore.round()}/100 — NDVI ${d.ndviProxy.toStringAsFixed(2)}. Farm is sequestering carbon effectively.';
+      }
+      setState(() => _tip = tip);
+      _svc.dispose();
+    });
+  }
+
+  @override
+  void dispose() { _svc.dispose(); super.dispose(); }
+
   @override
   Widget build(BuildContext context) => ClipRRect(
         borderRadius: BorderRadius.circular(20),
@@ -646,8 +777,7 @@ class _TipCard extends StatelessWidget {
           SizedBox(
             height: 110,
             child: CachedNetworkImage(
-              imageUrl:
-                  'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&q=90',
+              imageUrl: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&q=90',
               fit: BoxFit.cover, width: double.infinity,
               placeholder: (ctx, url) => Container(color: kPrimaryLight),
               errorWidget: (ctx, url, err) => Container(color: kPrimaryLight),
@@ -657,10 +787,7 @@ class _TipCard extends StatelessWidget {
             height: 110,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  kPrimary.withValues(alpha: 0.85),
-                  kPrimary.withValues(alpha: 0.5)
-                ],
+                colors: [kPrimary.withValues(alpha: 0.85), kPrimary.withValues(alpha: 0.5)],
                 begin: Alignment.centerLeft, end: Alignment.centerRight,
               ),
             ),
@@ -673,25 +800,20 @@ class _TipCard extends StatelessWidget {
                 decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.auto_awesome_rounded,
-                    color: Colors.white, size: 20)),
+                child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20)),
               const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(AppStrings.of(context).aiTipOfTheDay, style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10, fontWeight: FontWeight.w700,
-                        color: Colors.white60, letterSpacing: 1)),
-                    const SizedBox(height: 4),
-                    Text(
-                        'SCI Index 68/100 — add compost to boost organic matter by 15%',
-                        style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13, color: Colors.white, height: 1.35)),
-                  ],
-                ),
-              ),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(AppStrings.of(context).aiTipOfTheDay, style: GoogleFonts.plusJakartaSans(
+                      fontSize: 10, fontWeight: FontWeight.w700,
+                      color: Colors.white60, letterSpacing: 1)),
+                  const SizedBox(height: 4),
+                  Text(_tip, style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13, color: Colors.white, height: 1.35)),
+                ],
+              )),
             ]),
           ),
         ]),
@@ -735,7 +857,7 @@ class _FarmSearchDelegate extends SearchDelegate<String> {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: results.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
+      separatorBuilder: (ctx, idx) => const Divider(height: 1),
       itemBuilder: (context, idx) => ListTile(
         leading: const Icon(Icons.search_rounded, color: kPrimary),
         title: Text(results[idx],
@@ -748,14 +870,27 @@ class _FarmSearchDelegate extends SearchDelegate<String> {
 
 // ── Notifications Sheet ───────────────────────────────────────────────────────
 
-class _NotificationsSheet extends StatelessWidget {
+class _NotificationsSheet extends StatefulWidget {
   const _NotificationsSheet();
+  @override
+  State<_NotificationsSheet> createState() => _NotificationsSheetState();
+}
 
-  static const _notifData = [
-    (Icons.eco_rounded,           kPrimary,    'Carbon credits ready',   'You have 12.5 t eligible for sale'),
-    (Icons.warning_amber_rounded, kAccentGold, 'Low soil moisture',      'Field A moisture dropped to 28%'),
-    (Icons.cloud_outlined,        kAccentBlue, 'Rain forecast',          'Heavy rain expected in 2 days'),
-  ];
+class _NotificationsSheetState extends State<_NotificationsSheet> {
+  final _svc = SensorService();
+  List<SensorAlert> _alerts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _svc.fetchOnce().then((d) {
+      if (mounted) setState(() => _alerts = d.alerts);
+      _svc.dispose();
+    });
+  }
+
+  @override
+  void dispose() { _svc.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => Column(
@@ -764,8 +899,7 @@ class _NotificationsSheet extends StatelessWidget {
           const SizedBox(height: 12),
           Container(
             width: 36, height: 4,
-            decoration: BoxDecoration(
-                color: kBorder, borderRadius: BorderRadius.circular(2))),
+            decoration: BoxDecoration(color: kBorder, borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -774,24 +908,34 @@ class _NotificationsSheet extends StatelessWidget {
               children: [
                 Text(AppStrings.of(context).notifications, style: GoogleFonts.plusJakartaSans(
                     fontSize: 17, fontWeight: FontWeight.w700, color: kTextDark)),
-                StatusBadge('${_notifData.length}', kPrimary),
+                if (_alerts.isNotEmpty) StatusBadge('${_alerts.length}', kPrimary),
               ],
             ),
           ),
           const SizedBox(height: 12),
-          ..._notifData.map((n) => ListTile(
+          if (_alerts.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('No active alerts — all sensors optimal 🌱',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13, color: kTextGrey)),
+            )
+          else
+            ..._alerts.map((a) {
+              final color = a.level == AlertLevel.high ? kRed : a.level == AlertLevel.medium ? kAmber : kPrimary;
+              return ListTile(
                 leading: Container(
                   width: 40, height: 40,
                   decoration: BoxDecoration(
-                      color: n.$2.withValues(alpha: 0.12),
+                      color: color.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12)),
-                  child: Icon(n.$1, color: n.$2, size: 20),
+                  child: Icon(Icons.warning_amber_rounded, color: color, size: 20),
                 ),
-                title: Text(n.$3, style: GoogleFonts.plusJakartaSans(
+                title: Text(a.title, style: GoogleFonts.plusJakartaSans(
                     fontSize: 13, fontWeight: FontWeight.w600, color: kTextDark)),
-                subtitle: Text(n.$4, style: GoogleFonts.plusJakartaSans(
+                subtitle: Text(a.message, style: GoogleFonts.plusJakartaSans(
                     fontSize: 12, color: kTextGrey)),
-              )),
+              );
+            }),
           const SizedBox(height: 16),
         ],
       );

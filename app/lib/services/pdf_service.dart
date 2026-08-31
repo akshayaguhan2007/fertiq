@@ -2,7 +2,6 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import '../services/mock_data.dart';
 
 class PdfService {
   PdfService._();
@@ -97,8 +96,10 @@ class PdfService {
 
                 // Credit metrics row
                 pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly, children: [
-                  _metricBox(font, fontReg, kGreen, kGreenL, '${MockData.currentCarbon}', 'tons C/ha'),
-                  _metricBox(font, fontReg, kGreen, kGreenL, '${MockData.carbonStability.round()}%', 'Stability'),
+                  _metricBox(font, fontReg, kGreen, kGreenL,
+                      co2eReduced.toStringAsFixed(2), 'tons CO₂e'),
+                  _metricBox(font, fontReg, kGreen, kGreenL,
+                      carbonCredits.toStringAsFixed(3), 'Credits'),
                   _metricBox(font, fontReg, kGold, PdfColor.fromHex('FFFBEB'),
                       '₹${(carbonCredits * 3600).toStringAsFixed(0)}', 'Market Value'),
                 ]),

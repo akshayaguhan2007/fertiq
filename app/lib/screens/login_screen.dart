@@ -3,6 +3,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
+import '../main.dart' show setProfileChecked;
 import '../theme.dart';
 import '../widgets/premium_widgets.dart';
 
@@ -41,7 +43,22 @@ class _LoginScreenState extends State<LoginScreen> {
     if (error != null) {
       setState(() { _loading = false; _errorMsg = error; });
     } else {
-      // GoRouter refreshListenable will auto-redirect via the redirect guard
+      // Auto-create profile if it doesn't exist so user goes straight to dashboard
+      final exists = await FirestoreService.instance.profileExists();
+      if (!exists) {
+        try {
+          await FirestoreService.instance.saveProfile(
+            name:              AuthService.instance.name ?? 'Farmer',
+            phone:             AuthService.instance.email ?? '',
+            village:           '',
+            district:          '',
+            farmSize:          1.0,
+            crops:             [],
+            preferredLanguage: 'en',
+          );
+        } catch (_) {}
+      }
+      setProfileChecked(true);
       if (mounted) setState(() => _loading = false);
     }
   }

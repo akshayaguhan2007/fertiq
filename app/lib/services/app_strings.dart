@@ -86,11 +86,12 @@ class AppStrings {
 
   // ── Dashboard categories ──────────────────────────────────
   String get satellite        => _s('Satellite',                   'செயற்கைக்கோள்');
-  String get sensors          => _s('Sensors',                     'சென்சார்கள்');
+  String get sensors          => _s('Sensors',                     'சென்சார்');
   String get fertilizerCat    => _s('Fertilizer',                  'உரம்');
   String get climate          => _s('Climate',                     'காலநிலை');
   String get carbon           => _s('Carbon',                      'கார்பன்');
-  String get reports          => _s('Reports',                     'அறிக்கைகள்');
+  String get reports          => _s('Reports',                     'அறிக்கை');
+  String get cameraAnalysis   => _s('Camera',                      'கேமரா');
 
   // ── Dashboard insight cards ───────────────────────────────
   String get carbonReport     => _s('Carbon Report',               'கார்பன் அறிக்கை');
@@ -211,6 +212,7 @@ class AppStrings {
   String get farmStage          => _s('Stage',                     'நிலை');
   String get farmHealth         => _s('Health',                    'ஆரோக்கியம்');
   String get sharedApp          => _s('Shared! 📤',                'பகிர்ந்தது! 📤');
+  String get linkCopied         => _s('Link copied to clipboard! 🔗', 'இணைப்பு நகலெடுக்கப்பட்டது! 🔗');
 
   // ── Farm Boundary ──────────────────────────────────────────
   String get tapToAddPoints     => _s('Tap map to add boundary points',
@@ -233,7 +235,6 @@ class AppStrings {
   String get payment            => _s('Payment',                   'பணம்');
 
   // ── Camera Analysis ────────────────────────────────────────
-  String get cameraAnalysis     => _s('Camera Leaf Analysis',      'கேமரா இலை பகுப்பாய்வு');
   String get cameraInfoBanner   => _s('Point camera at crop leaves to detect deficiencies, diseases & health score',
                                       'குறைபாடுகள், நோய்கள் & ஆரோக்கிய மதிப்பெண் கண்டறிய பயிர் இலைகளில் கேமராவை நோக்குங்கள்');
   String get tapToCapture       => _s('Tap to capture leaf photo', 'இலை புகைப்படம் எடுக்க தட்டவும்');

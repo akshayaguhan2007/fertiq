@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -8,6 +9,7 @@ import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/app_strings.dart';
 import '../theme.dart';
+import 'help_support_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -17,10 +19,30 @@ class ProfileScreen extends StatelessWidget {
     return StreamBuilder<Farmer?>(
       stream: FirestoreService.instance.farmerStream(),
       builder: (context, snap) {
-        final farmer = snap.data;
-        if (farmer == null) {
+        if (snap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final farmer = snap.data;
+        if (farmer == null) {
+          return Scaffold(
+            body: Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.person_outline_rounded, size: 64, color: kTextGrey),
+                const SizedBox(height: 16),
+                Text('Profile not found',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w600, color: kTextDark)),
+                const SizedBox(height: 8),
+                Text('Please complete your profile to continue',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 13, color: kTextGrey)),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => context.go('/register'),
+                  child: const Text('Set Up Profile'),
+                ),
+              ]),
+            ),
           );
         }
         return _ProfileBody(farmer: farmer);
@@ -32,6 +54,24 @@ class ProfileScreen extends StatelessWidget {
 class _ProfileBody extends StatelessWidget {
   final Farmer farmer;
   const _ProfileBody({required this.farmer});
+
+  void _showNotifications(BuildContext context, AppStrings t) =>
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (_) => _NotificationsSheet(t: t),
+      );
+
+  void _showHelpSupport(BuildContext context, AppStrings t) =>
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => const HelpSupportScreen()));
+
+  void _shareApp(BuildContext context, AppStrings t) {
+    Clipboard.setData(const ClipboardData(text: 'https://cropplus.app/download'));
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(t.linkCopied)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,11 +108,9 @@ class _ProfileBody extends StatelessWidget {
                   ProfileMenuRow(icon: Icons.eco_outlined, text: t.carbonCredits, press: () => context.go('/carbon')),
                   ProfileMenuRow(icon: Icons.sensors_outlined, text: t.sensorSettings, press: () => context.go('/sensors')),
                   _LanguageTile(),
-                  ProfileMenuRow(icon: Icons.notifications_outlined, text: t.notifications, press: () {}),
-                  ProfileMenuRow(icon: Icons.help_outline_rounded, text: t.helpSupport, press: () {}),
-                  ProfileMenuRow(icon: Icons.share_outlined, text: t.shareApp, press: () {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.sharedApp)));
-                  }),
+                  ProfileMenuRow(icon: Icons.notifications_outlined, text: t.notifications, press: () => _showNotifications(context, t)),
+                  ProfileMenuRow(icon: Icons.help_outline_rounded, text: t.helpSupport, press: () => _showHelpSupport(context, t)),
+                  ProfileMenuRow(icon: Icons.share_outlined, text: t.shareApp, press: () => _shareApp(context, t)),
                   ProfileMenuRow(
                     icon: Icons.logout_rounded,
                     text: t.logout,
@@ -343,4 +381,52 @@ class _LanguageTile extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Notifications Sheet ───────────────────────────────────────────────────────
+
+class _NotificationsSheet extends StatelessWidget {
+  final AppStrings t;
+  const _NotificationsSheet({required this.t});
+
+  static const _items = [
+    (Icons.eco_rounded,           kPrimary,    'Carbon credits ready',   'You have 12.5 t eligible for sale'),
+    (Icons.warning_amber_rounded, kAccentGold, 'Low soil moisture',      'Field A moisture dropped to 28%'),
+    (Icons.cloud_outlined,        kAccentBlue, 'Rain forecast',          'Heavy rain expected in 2 days'),
+  ];
+
+  @override
+  Widget build(BuildContext context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(color: kBorder, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(t.notifications, style: GoogleFonts.plusJakartaSans(
+                  fontSize: 17, fontWeight: FontWeight.w700, color: kTextDark)),
+              StatusBadge('${_items.length}', kPrimary),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          ..._items.map((n) => ListTile(
+                leading: Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                      color: n.$2.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Icon(n.$1, color: n.$2, size: 20),
+                ),
+                title: Text(n.$3, style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13, fontWeight: FontWeight.w600, color: kTextDark)),
+                subtitle: Text(n.$4, style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, color: kTextGrey)),
+              )),
+          const SizedBox(height: 16),
+        ],
+      );
 }

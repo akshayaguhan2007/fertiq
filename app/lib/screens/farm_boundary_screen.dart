@@ -4,7 +4,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import '../services/app_strings.dart';
-import '../services/mock_data.dart';
 import '../theme.dart';
 
 class FarmBoundaryScreen extends StatefulWidget {
@@ -17,10 +16,7 @@ class _FarmBoundaryScreenState extends State<FarmBoundaryScreen> {
   final _mapCtrl = MapController();
   final _points  = <LatLng>[];
 
-  final _defaultCenter = LatLng(
-    MockData.farm.location.latitude,
-    MockData.farm.location.longitude,
-  );
+  final _defaultCenter = const LatLng(10.7867, 79.1378);
 
   void _addPoint(LatLng point) => setState(() => _points.add(point));
 

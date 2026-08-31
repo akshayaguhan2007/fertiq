@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'auth_service.dart';
 
 // Cloud Functions base URL — replace with your project's URL after deploy
 const String kFunctionsBase =
@@ -15,7 +16,10 @@ class SatelliteResult {
   final double carbonCredits;
   final double farmerPayment;
   final DateTime satelliteDate;
-  final String source; // 'satellite' | 'cache' | 'mock'
+  final String source;
+  final double lat;
+  final double lng;
+  final String placeName;
 
   const SatelliteResult({
     required this.ndvi,
@@ -27,6 +31,9 @@ class SatelliteResult {
     required this.farmerPayment,
     required this.satelliteDate,
     required this.source,
+    this.lat = 0,
+    this.lng = 0,
+    this.placeName = '',
   });
 
   // Biomass = 3.05 × NDVI − 0.35
@@ -41,49 +48,52 @@ class SatelliteResult {
   // Health score mapped from NDVI (0–1) to 0–100
   static double calcHealthScore(double ndvi) => (ndvi * 100).clamp(0.0, 100.0);
 
-  // Carbon credits = (current carbon − baseline) × 3.67
-  static double calcCredits(double carbon, double baseline) =>
-      ((carbon - baseline) * 3.67).clamp(0.0, double.infinity);
+  // Carbon credits = delta CO₂e sequestered above baseline
+  static double calcCredits(double carbon, [double baseline = 0.0]) =>
+      (calcCo2e(carbon) - calcCo2e(baseline)).clamp(0.0, double.infinity);
 
   // Farmer keeps 90% at ₹2,100/ton
   static double calcFarmerPayment(double credits) => credits * 2100 * 0.90;
 
   Map<String, dynamic> toJson() => {
-        'ndvi': ndvi,
-        'biomass': biomass,
-        'carbon': carbon,
-        'co2e': co2e,
-        'healthScore': healthScore,
-        'carbonCredits': carbonCredits,
-        'farmerPayment': farmerPayment,
+        'ndvi': ndvi, 'biomass': biomass, 'carbon': carbon,
+        'co2e': co2e, 'healthScore': healthScore,
+        'carbonCredits': carbonCredits, 'farmerPayment': farmerPayment,
         'satelliteDate': satelliteDate.toIso8601String(),
-        'source': source,
+        'source': source, 'lat': lat, 'lng': lng, 'placeName': placeName,
       };
 
   factory SatelliteResult.fromJson(Map<String, dynamic> j, String src) {
-    final ndvi = (j['ndvi'] as num).toDouble();
+    final ndvi    = (j['ndvi'] as num).toDouble();
     final biomass = (j['biomass'] as num?)?.toDouble() ?? calcBiomass(ndvi);
-    final carbon = (j['carbon'] as num?)?.toDouble() ?? calcCarbon(biomass);
-    final co2e = (j['co2e'] as num?)?.toDouble() ?? calcCo2e(carbon);
+    final carbon  = (j['carbon'] as num?)?.toDouble()  ?? calcCarbon(biomass);
+    final co2e    = (j['co2e'] as num?)?.toDouble()    ?? calcCo2e(carbon);
     return SatelliteResult(
-      ndvi: ndvi,
-      biomass: biomass,
-      carbon: carbon,
-      co2e: co2e,
-      healthScore: (j['healthScore'] as num?)?.toDouble() ?? calcHealthScore(ndvi),
-      carbonCredits: (j['carbonCredits'] as num?)?.toDouble() ?? 0,
-      farmerPayment: (j['farmerPayment'] as num?)?.toDouble() ?? 0,
-      satelliteDate: DateTime.parse(j['satelliteDate'] as String),
+      ndvi: ndvi, biomass: biomass, carbon: carbon, co2e: co2e,
+      healthScore:    (j['healthScore']    as num?)?.toDouble() ?? calcHealthScore(ndvi),
+      carbonCredits:  (j['carbonCredits']  as num?)?.toDouble() ?? 0,
+      farmerPayment:  (j['farmerPayment']  as num?)?.toDouble() ?? 0,
+      satelliteDate:  DateTime.parse(j['satelliteDate'] as String),
       source: src,
+      lat: (j['lat'] as num?)?.toDouble() ?? 0,
+      lng: (j['lng'] as num?)?.toDouble() ?? 0,
+      placeName: j['placeName'] as String? ?? '',
     );
   }
+
+  SatelliteResult copyWith({DateTime? satelliteDate, String? source}) => SatelliteResult(
+    ndvi: ndvi, biomass: biomass, carbon: carbon, co2e: co2e,
+    healthScore: healthScore, carbonCredits: carbonCredits, farmerPayment: farmerPayment,
+    satelliteDate: satelliteDate ?? this.satelliteDate,
+    source: source ?? this.source, lat: lat, lng: lng, placeName: placeName,
+  );
 
   static SatelliteResult mock() {
     const ndvi = 0.68;
     final biomass = calcBiomass(ndvi);
     final carbon = calcCarbon(biomass);
     final co2e = calcCo2e(carbon);
-    final credits = calcCredits(carbon, 45.0);
+    final credits = calcCredits(carbon);
     return SatelliteResult(
       ndvi: ndvi,
       biomass: biomass,
@@ -100,7 +110,29 @@ class SatelliteResult {
 
 class SatelliteService {
   static const _cacheKey = 'satellite_result_cache';
-  static const _cacheTtlHours = 24;
+
+  /// Reverse geocode lat/lng → "Village, District, State" using OSM Nominatim
+  static Future<String> geocode(double lat, double lng) async {
+    try {
+      final uri = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lng&format=json&zoom=14',
+      );
+      final res = await http.get(uri, headers: {'User-Agent': 'CarbonTechApp/1.0'}
+      ).timeout(const Duration(seconds: 6));
+      if (res.statusCode == 200) {
+        final j = jsonDecode(res.body) as Map<String, dynamic>;
+        final a = j['address'] as Map<String, dynamic>? ?? {};
+        final parts = [
+          a['village'] ?? a['town'] ?? a['suburb'] ?? a['neighbourhood'] ?? a['hamlet'],
+          a['county']  ?? a['state_district'] ?? a['district'],
+          a['state'],
+        ].whereType<String>().toList();
+        if (parts.isNotEmpty) return parts.join(', ');
+        return j['display_name']?.toString().split(',').take(3).join(',').trim() ?? '';
+      }
+    } catch (_) {}
+    return '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+  }
 
   /// Fetch NDVI from the Cloud Function, compute all derived values.
   /// Falls back to cache, then to mock data.
@@ -110,54 +142,94 @@ class SatelliteService {
     required double radiusMeters,
     required String startDate,
     required String endDate,
-    double baselineCarbon = 45.0,
+    double baselineCarbon = 0.0,
+    double? sensorNdvi,
   }) async {
-    try {
-      final uri = Uri.parse('$kFunctionsBase/getNDVI').replace(
-        queryParameters: {
-          'lat': lat.toString(),
-          'lng': lng.toString(),
-          'radius': radiusMeters.toString(),
-          'startDate': startDate,
-          'endDate': endDate,
-        },
+    // Always geocode first — independent of data source
+    final place = await geocode(lat, lng);
+
+    SatelliteResult build(Map<String, dynamic> data, String src) {
+      final ndvi    = (data['ndvi']    as num).toDouble();
+      final biomass = (data['biomass'] as num?)?.toDouble() ?? SatelliteResult.calcBiomass(ndvi);
+      final carbon  = (data['carbon']  as num?)?.toDouble() ?? SatelliteResult.calcCarbon(biomass);
+      final co2e    = (data['co2e']    as num?)?.toDouble() ?? SatelliteResult.calcCo2e(carbon);
+      final credits = (data['carbon_credits'] as num?)?.toDouble() ?? SatelliteResult.calcCredits(carbon, baselineCarbon);
+      final payment = (data['farmer_payment'] as num?)?.toDouble() ?? SatelliteResult.calcFarmerPayment(credits);
+      final dateStr = data['date'] as String? ?? DateTime.now().toIso8601String();
+      return SatelliteResult(
+        ndvi: ndvi, biomass: biomass, carbon: carbon, co2e: co2e,
+        healthScore:   SatelliteResult.calcHealthScore(ndvi),
+        carbonCredits: credits, farmerPayment: payment,
+        satelliteDate: DateTime.tryParse(dateStr) ?? DateTime.now(),
+        source: src, lat: lat, lng: lng, placeName: place,
       );
+    }
 
-      final res = await http.get(uri).timeout(const Duration(seconds: 20));
-
+    // 1. Backend /ndvi — uses Open-Meteo real weather data per location
+    try {
+      final uri = Uri.parse('$kApiBase/ndvi').replace(queryParameters: {
+        'lat': lat.toString(), 'lng': lng.toString(),
+        'start_date': startDate, 'end_date': endDate,
+      });
+      final res = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer ${AuthService.instance.token}'},
+      ).timeout(const Duration(seconds: 20));
       if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final ndvi = (data['ndvi'] as num).toDouble();
-        final biomass = SatelliteResult.calcBiomass(ndvi);
-        final carbon = SatelliteResult.calcCarbon(biomass);
-        final co2e = SatelliteResult.calcCo2e(carbon);
-        final credits = SatelliteResult.calcCredits(carbon, baselineCarbon);
-
-        final result = SatelliteResult(
-          ndvi: ndvi,
-          biomass: biomass,
-          carbon: carbon,
-          co2e: co2e,
-          healthScore: SatelliteResult.calcHealthScore(ndvi),
-          carbonCredits: credits,
-          farmerPayment: SatelliteResult.calcFarmerPayment(credits),
-          satelliteDate: DateTime.parse(
-              data['date'] as String? ?? DateTime.now().toIso8601String()),
-          source: 'satellite',
-        );
-
+        final data   = jsonDecode(res.body) as Map<String, dynamic>;
+        final src    = data['source'] as String? ?? 'backend';
+        final result = build(data, src);
         await _cache(result);
         return result;
       }
     } catch (_) {}
 
-    // Try cache
+    // 2. Cached result (not mock)
     final cached = await _loadCache();
-    if (cached != null) return cached;
+    if (cached != null && cached.source != 'mock') {
+      // update location to current pin
+      final updated = SatelliteResult(
+        ndvi: cached.ndvi, biomass: cached.biomass, carbon: cached.carbon,
+        co2e: cached.co2e, healthScore: cached.healthScore,
+        carbonCredits: cached.carbonCredits, farmerPayment: cached.farmerPayment,
+        satelliteDate: cached.satelliteDate, source: 'cache',
+        lat: lat, lng: lng, placeName: place,
+      );
+      await _cache(updated);
+      return updated;
+    }
 
-    // Final fallback
-    return SatelliteResult.mock();
+    // 3. Sensor ndvi as last resort
+    if (sensorNdvi != null && sensorNdvi > 0) {
+      final biomass = SatelliteResult.calcBiomass(sensorNdvi);
+      final carbon  = SatelliteResult.calcCarbon(biomass);
+      final co2e    = SatelliteResult.calcCo2e(carbon);
+      final credits = SatelliteResult.calcCredits(carbon, baselineCarbon);
+      final result  = SatelliteResult(
+        ndvi: sensorNdvi, biomass: biomass, carbon: carbon, co2e: co2e,
+        healthScore:   SatelliteResult.calcHealthScore(sensorNdvi),
+        carbonCredits: credits, farmerPayment: SatelliteResult.calcFarmerPayment(credits),
+        satelliteDate: DateTime.now(), source: 'sensor',
+        lat: lat, lng: lng, placeName: place,
+      );
+      await _cache(result);
+      return result;
+    }
+
+    // 4. Absolute fallback — estimated with real location
+    final result = SatelliteResult(
+      ndvi: 0.5, biomass: SatelliteResult.calcBiomass(0.5),
+      carbon: SatelliteResult.calcCarbon(SatelliteResult.calcBiomass(0.5)),
+      co2e: SatelliteResult.calcCo2e(SatelliteResult.calcCarbon(SatelliteResult.calcBiomass(0.5))),
+      healthScore: 50, carbonCredits: 0, farmerPayment: 0,
+      satelliteDate: DateTime.now(), source: 'estimated',
+      lat: lat, lng: lng, placeName: place,
+    );
+    await _cache(result);
+    return result;
   }
+
+  Future<SatelliteResult?> loadCache() => _loadCache();
 
   Future<void> _cache(SatelliteResult r) async {
     final prefs = await SharedPreferences.getInstance();
@@ -169,11 +241,10 @@ class SatelliteService {
   Future<SatelliteResult?> _loadCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_cacheKey);
+      final raw   = prefs.getString(_cacheKey);
       if (raw == null) return null;
-      final json = jsonDecode(raw) as Map<String, dynamic>;
-      final cachedAt = DateTime.parse(json['cachedAt'] as String);
-      if (DateTime.now().difference(cachedAt).inHours > _cacheTtlHours) return null;
+      final json  = jsonDecode(raw) as Map<String, dynamic>;
+      // No TTL — always return last scan so carbon report stays accurate
       return SatelliteResult.fromJson(json, 'cache');
     } catch (_) {
       return null;

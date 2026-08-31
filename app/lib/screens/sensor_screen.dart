@@ -16,13 +16,20 @@ class _SensorScreenState extends State<SensorScreen> {
   bool _loading = false;
 
   @override
-  void initState() { super.initState(); _fetch(); }
+  void initState() {
+    super.initState();
+    _fetch();
+  }
 
   Future<void> _fetch() async {
     setState(() => _loading = true);
-    SensorResult? r = await _api.fetchLatestReading('demo-farm-1');
-    r ??= await _api.simulateFallback();
-    setState(() { _result = r; _loading = false; });
+    try {
+      final r = await _api.fetchLatestReading('demo-farm-1')
+          ?? _api.disconnectedResult();
+      if (mounted) setState(() { _result = r; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _result = _api.disconnectedResult(); _loading = false; });
+    }
   }
 
   @override
@@ -103,7 +110,8 @@ class _SourceBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final live = source == 'hardware';
-    final color = live ? kGreenSoft : kAmber;
+    final disconnected = source == 'disconnected';
+    final color = live ? kGreenSoft : disconnected ? kRed : kAmber;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -119,10 +127,13 @@ class _SourceBar extends StatelessWidget {
               boxShadow: [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 4)]),
           ),
           const SizedBox(width: 10),
-          Text(live ? 'Live — Raspberry Pi' : 'Demo data — connect Pi for live readings',
-              style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+          Text(
+            live ? 'Live — Raspberry Pi'
+                : disconnected ? 'Sensor not connected — connect Pi for live readings'
+                : 'Last reading — sensor offline',
+            style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
           const Spacer(),
-          Text(live ? 'LIVE' : 'DEMO',
+          Text(live ? 'LIVE' : disconnected ? 'OFFLINE' : 'CACHED',
               style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
         ],
       ),
@@ -280,7 +291,8 @@ class _NpkTile extends StatelessWidget {
                             fontSize: 14, fontWeight: FontWeight.w800, color: color)),
                   ),
                 ),
-                StatusBadge(status, statusColor),
+                Text(status, style: GoogleFonts.plusJakartaSans(
+                    fontSize: 9, fontWeight: FontWeight.w700, color: statusColor)),
               ],
             ),
             const SizedBox(height: 12),

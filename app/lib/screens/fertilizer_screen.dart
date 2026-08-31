@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/app_strings.dart';
-import '../services/mock_data.dart';
+import '../services/sensor_service.dart';
 import '../theme.dart';
 
 class FertilizerScreen extends StatefulWidget {
   const FertilizerScreen({super.key});
-
   @override
   State<FertilizerScreen> createState() => _FertilizerScreenState();
 }
@@ -14,35 +13,43 @@ class FertilizerScreen extends StatefulWidget {
 class _FertilizerScreenState extends State<FertilizerScreen> {
   final _yieldCtrl = TextEditingController(text: '5.0');
   bool _calculated = false;
-
-  // Fertilizer calculation (matches backend logic)
+  bool _loadingSensor = true;
+  LiveSensorData? _live;
   late _FertResult _result;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSensor();
+  }
+
+  Future<void> _loadSensor() async {
+    final svc = SensorService();
+    final data = await svc.fetchOnce();
+    svc.dispose();
+    if (mounted) setState(() { _live = data; _loadingSensor = false; });
+  }
 
   void _calculate() {
     final targetYield = double.tryParse(_yieldCtrl.text) ?? 5.0;
-    final soil = MockData.soilReading;
+    final n = _live?.n ?? 0.0;
+    final p = _live?.p ?? 0.0;
+    final k = _live?.k ?? 0.0;
 
-    // N-P-K removal rates for Rice (kg per ton yield)
     const nRemoval = 16.0, pRemoval = 8.0, kRemoval = 14.0;
-
     final nDemand = targetYield * nRemoval;
     final pDemand = targetYield * pRemoval;
     final kDemand = targetYield * kRemoval;
-
-    final nSupply = soil.n * 2;
-    final pSupply = soil.p * 2;
-    final kSupply = soil.k * 2;
-
+    final nSupply = n * 2;
+    final pSupply = p * 2;
+    final kSupply = k * 2;
     final nDef = (nDemand - nSupply).clamp(0.0, 999.0);
     final pDef = (pDemand - pSupply).clamp(0.0, 999.0);
     final kDef = (kDemand - kSupply).clamp(0.0, 999.0);
-
-    final urea = (nDef / 0.46);
-    final dap  = (pDef / 0.20);
-    final mop  = (kDef / 0.50);
-
+    final urea = nDef / 0.46;
+    final dap  = pDef / 0.20;
+    final mop  = kDef / 0.50;
     final cost = urea * 6 + dap * 27 + mop * 17;
-    const traditional = 5000.0;
 
     setState(() {
       _result = _FertResult(
@@ -50,120 +57,114 @@ class _FertilizerScreenState extends State<FertilizerScreen> {
         nSupply: nSupply, pSupply: pSupply, kSupply: kSupply,
         nDef: nDef, pDef: pDef, kDef: kDef,
         urea: urea, dap: dap, mop: mop,
-        cost: cost, savings: (traditional - cost).clamp(0, 9999),
+        cost: cost, savings: (5000.0 - cost).clamp(0, 9999),
       );
       _calculated = true;
     });
   }
 
   @override
-  void dispose() {
-    _yieldCtrl.dispose();
-    super.dispose();
-  }
+  void dispose() { _yieldCtrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
-    final farm     = MockData.farm;
-    final analysis = MockData.analysis;
+    if (_loadingSensor) {
+      return Scaffold(
+        appBar: AppBar(title: Text(AppStrings.of(context).fertilizerPlanTitle)),
+        body: const Center(child: CircularProgressIndicator(color: kPrimary)),
+      );
+    }
+    final live = _live!;
+    final isLive = live.source == 'hardware';
 
     return Scaffold(
       appBar: AppBar(title: Text(AppStrings.of(context).fertilizerPlanTitle)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header info
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: kGreen.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                'Crop: ${analysis.cropType}  |  Area: ${farm.area} ha  |  Soil: ${farm.soilType}',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: kGreen.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              Expanded(child: Text(
+                'Crop: Rice  |  Source: ${isLive ? "Live Sensor" : "Last Reading"}',
                 style: const TextStyle(fontSize: 13, color: kGreen, fontWeight: FontWeight.w600),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Soil Status
-            _SoilStatusCard(soil: analysis.soil),
-            const SizedBox(height: 16),
-
-            // Target yield input
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(AppStrings.of(context).targetYield,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: kTextDark)),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _yieldCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*'))],
-                      decoration: InputDecoration(
-                        labelText: AppStrings.of(context).expectedYield,
-                        suffixText: 'tons/ha',
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _calculate,
-                        icon: const Icon(Icons.calculate_outlined),
-                        label: Text(AppStrings.of(context).calculateFert),
-                      ),
-                    ),
-                  ],
+              )),
+              Icon(isLive ? Icons.sensors_rounded : Icons.history_rounded,
+                  color: isLive ? kGreen : kAmber, size: 16),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          _SoilStatusCard(live: live),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(AppStrings.of(context).targetYield,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: kTextDark)),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _yieldCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*'))],
+                  decoration: InputDecoration(
+                    labelText: AppStrings.of(context).expectedYield,
+                    suffixText: 'tons/ha', isDense: true,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _calculate,
+                    icon: const Icon(Icons.calculate_outlined),
+                    label: Text(AppStrings.of(context).calculateFert),
+                  ),
+                ),
+              ]),
             ),
+          ),
+          const SizedBox(height: 16),
+          if (_calculated) ...[
+            _RecommendationCard(result: _result),
             const SizedBox(height: 16),
-
-            if (_calculated) ...[
-              _RecommendationCard(result: _result),
-              const SizedBox(height: 16),
-              _ScheduleCard(result: _result),
-              const SizedBox(height: 16),
-              _ReminderRow(),
-            ],
-            const SizedBox(height: 80),
+            _ScheduleCard(result: _result),
+            const SizedBox(height: 16),
+            _ReminderRow(),
           ],
-        ),
+          const SizedBox(height: 80),
+        ]),
       ),
     );
   }
 }
 
 class _SoilStatusCard extends StatelessWidget {
-  final dynamic soil;
-  const _SoilStatusCard({required this.soil});
+  final LiveSensorData live;
+  const _SoilStatusCard({required this.live});
+
+  String _status(double v, double lo, double hi) =>
+      v < lo ? 'LOW' : v > hi ? 'HIGH' : 'OK';
 
   @override
   Widget build(BuildContext context) => Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('SOIL STATUS',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                      color: kTextGrey, letterSpacing: 1.2)),
-              const SizedBox(height: 12),
-              _SoilBar(AppStrings.of(context).nitrogen,   soil.n,        80,  'ppm', 'LOW'),
-              _SoilBar(AppStrings.of(context).phosphorus, soil.p,        30,  'ppm', 'OK'),
-              _SoilBar(AppStrings.of(context).potassium,  soil.k,        150, 'ppm', 'HIGH'),
-              _SoilBar(AppStrings.of(context).ph,         soil.ph,       7.0, '',    'IDEAL'),
-              _SoilBar(AppStrings.of(context).moisture,   soil.moisture, 50,  '%',   'GOOD'),
-            ],
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('SOIL STATUS',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                    color: kTextGrey, letterSpacing: 1.2)),
+            const SizedBox(height: 12),
+            _SoilBar(AppStrings.of(context).nitrogen,   live.n,        80,  'ppm', _status(live.n,   40,  80)),
+            _SoilBar(AppStrings.of(context).phosphorus, live.p,        40,  'ppm', _status(live.p,   20,  40)),
+            _SoilBar(AppStrings.of(context).potassium,  live.k,        200, 'ppm', _status(live.k,  100, 200)),
+            _SoilBar(AppStrings.of(context).ph,         live.ph,       7.5, '',    _status(live.ph,  6.0, 7.5)),
+            _SoilBar(AppStrings.of(context).moisture,   live.moisture, 50,  '%',   _status(live.moisture, 20, 50)),
+          ]),
         ),
       );
 }
@@ -176,38 +177,30 @@ class _SoilBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pct   = (current / optimal).clamp(0.0, 1.0);
-    final color = pct > 0.9 ? kGreenSoft : pct > 0.6 ? kGreenLight : kAmber;
+    final color = statusLabel == 'OK' ? kGreenSoft : kAmber;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 12, color: kTextDark)),
-              Row(
-                children: [
-                  Text('${current % 1 == 0 ? current.round() : current.toStringAsFixed(1)}$unit',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
-                    child: Text(statusLabel, style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(value: pct, minHeight: 7,
-                backgroundColor: const Color(0xFFE0E0E0), color: color),
-          ),
-        ],
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: kTextDark)),
+          Row(children: [
+            Text('${current % 1 == 0 ? current.round() : current.toStringAsFixed(1)}$unit',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+              child: Text(statusLabel, style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold)),
+            ),
+          ]),
+        ]),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(value: pct, minHeight: 7,
+              backgroundColor: const Color(0xFFE0E0E0), color: color),
+        ),
+      ]),
     );
   }
 }
@@ -220,30 +213,22 @@ class _RecommendationCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('RECOMMENDED PRODUCTS',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                      color: kTextGrey, letterSpacing: 1.2)),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  _FertBox('Urea\n(46% N)', '${result.urea.round()} kg',
-                      '₹${(result.urea * 6).round()}', kGreen),
-                  const SizedBox(width: 8),
-                  _FertBox('DAP\n(P source)', '${result.dap.round()} kg',
-                      '₹${(result.dap * 27).round()}', kAmber),
-                  const SizedBox(width: 8),
-                  _FertBox('MOP\n(K source)', '${result.mop.round()} kg',
-                      '₹${(result.mop * 17).round()}', kRed),
-                ],
-              ),
-              const Divider(height: 24),
-              _CostRow(AppStrings.of(context).totalCost,     '₹${result.cost.round()} per hectare', kTextDark),
-              _CostRow(AppStrings.of(context).savingsVsTrad, '₹${result.savings.round()}!',         kGreenSoft),
-            ],
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('RECOMMENDED PRODUCTS',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                    color: kTextGrey, letterSpacing: 1.2)),
+            const SizedBox(height: 14),
+            Row(children: [
+              _FertBox('Urea\n(46% N)', '${result.urea.round()} kg', '₹${(result.urea * 6).round()}', kGreen),
+              const SizedBox(width: 8),
+              _FertBox('DAP\n(P source)', '${result.dap.round()} kg', '₹${(result.dap * 27).round()}', kAmber),
+              const SizedBox(width: 8),
+              _FertBox('MOP\n(K source)', '${result.mop.round()} kg', '₹${(result.mop * 17).round()}', kRed),
+            ]),
+            const Divider(height: 24),
+            _CostRow(AppStrings.of(context).totalCost,     '₹${result.cost.round()} per hectare', kTextDark),
+            _CostRow(AppStrings.of(context).savingsVsTrad, '₹${result.savings.round()}!',         kGreenSoft),
+          ]),
         ),
       );
 }
@@ -262,15 +247,13 @@ class _FertBox extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: color.withValues(alpha: 0.2)),
           ),
-          child: Column(
-            children: [
-              Text(label, textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 6),
-              Text(qty, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kTextDark)),
-              Text(cost, style: TextStyle(fontSize: 11, color: color)),
-            ],
-          ),
+          child: Column(children: [
+            Text(label, textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Text(qty, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: kTextDark)),
+            Text(cost, style: TextStyle(fontSize: 11, color: color)),
+          ]),
         ),
       );
 }
@@ -283,13 +266,10 @@ class _CostRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kTextDark)),
-            Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color)),
-          ],
-        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kTextDark)),
+          Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color)),
+        ]),
       );
 }
 
@@ -301,21 +281,16 @@ class _ScheduleCard extends StatelessWidget {
   Widget build(BuildContext context) => Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('APPLICATION SCHEDULE',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                      color: kTextGrey, letterSpacing: 1.2)),
-              const SizedBox(height: 14),
-              _ScheduleItem('Today — Basal',
-                  '${(result.urea * 0.5).round()} kg Urea + ${result.dap.round()} kg DAP'),
-              _ScheduleItem('After 25 days — Tillering',
-                  '${(result.urea * 0.25).round()} kg Urea'),
-              _ScheduleItem('After 45 days — Panicle',
-                  '${(result.urea * 0.25).round()} kg Urea'),
-            ],
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('APPLICATION SCHEDULE',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                    color: kTextGrey, letterSpacing: 1.2)),
+            const SizedBox(height: 14),
+            _ScheduleItem('Today — Basal',
+                '${(result.urea * 0.5).round()} kg Urea + ${result.dap.round()} kg DAP'),
+            _ScheduleItem('After 25 days — Tillering', '${(result.urea * 0.25).round()} kg Urea'),
+            _ScheduleItem('After 45 days — Panicle',   '${(result.urea * 0.25).round()} kg Urea'),
+          ]),
         ),
       );
 }
@@ -327,25 +302,17 @@ class _ScheduleItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 10, height: 10, margin: const EdgeInsets.only(top: 4),
-              decoration: const BoxDecoration(color: kGreen, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(date, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kTextDark)),
-                  Text(action, style: const TextStyle(fontSize: 12, color: kTextGrey)),
-                ],
-              ),
-            ),
-          ],
-        ),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 10, height: 10, margin: const EdgeInsets.only(top: 4),
+            decoration: const BoxDecoration(color: kGreen, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(date,   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kTextDark)),
+            Text(action, style: const TextStyle(fontSize: 12, color: kTextGrey)),
+          ])),
+        ]),
       );
 }
 
@@ -353,27 +320,21 @@ class _ReminderRow extends StatelessWidget {
   const _ReminderRow();
 
   @override
-  Widget build(BuildContext context) => Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(AppStrings.of(context).reminderSet))),
-              icon: const Icon(Icons.alarm, size: 18),
-              label: Text(AppStrings.of(context).setReminder),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(AppStrings.of(context).markedDone), backgroundColor: kGreenSoft)),
-              icon: const Icon(Icons.check, size: 18),
-              label: Text(AppStrings.of(context).markDone),
-            ),
-          ),
-        ],
-      );
+  Widget build(BuildContext context) => Row(children: [
+        Expanded(child: OutlinedButton.icon(
+          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(AppStrings.of(context).reminderSet))),
+          icon: const Icon(Icons.alarm, size: 18),
+          label: Text(AppStrings.of(context).setReminder),
+        )),
+        const SizedBox(width: 12),
+        Expanded(child: ElevatedButton.icon(
+          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(AppStrings.of(context).markedDone), backgroundColor: kGreenSoft)),
+          icon: const Icon(Icons.check, size: 18),
+          label: Text(AppStrings.of(context).markDone),
+        )),
+      ]);
 }
 
 class _FertResult {

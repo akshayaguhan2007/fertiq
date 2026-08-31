@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'mock_data.dart';
+import 'auth_service.dart';
 
 /// Base URL of your FastAPI backend.
-/// Change to your Pi's local IP when running on the same network,
-/// e.g. 'http://192.168.1.50:8000'
 const String kApiBase = 'http://localhost:8000';
 
 class ApiService {
@@ -16,13 +14,15 @@ class ApiService {
   /// Called by Flutter after the Pi posts a reading.
   /// Fetches the latest hardware reading for [farmId] from the backend.
   Future<SensorResult?> fetchLatestReading(String farmId) async {
+    final token = AuthService.instance.token;
+    if (token == null) return null;
     try {
-      final res = await http
-          .get(Uri.parse('$_base/sensor/latest/$farmId'))
-          .timeout(const Duration(seconds: 8));
+      final res = await http.get(
+        Uri.parse('$_base/sensor/live'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 10));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
-        if (data.containsKey('error')) return null;
         return SensorResult.fromJson(data);
       }
     } catch (_) {}
@@ -71,23 +71,15 @@ class ApiService {
     return {};
   }
 
-  // ── Simulate (fallback when no hardware) ────────────────────────────────
-
-  Future<SensorResult> simulateFallback() async {
-    final a = MockData.analysis;
-    return SensorResult(
-      healthScore: a.healthScore,
-      ndviProxy: a.ndvi,
-      n: a.soil.n, p: a.soil.p, k: a.soil.k,
-      ph: a.soil.ph, ec: a.soil.ec,
-      moisture: a.soil.moisture, temperature: a.soil.temperature,
-      carbon: a.carbon.totalCarbon,
-      co2Equivalent: a.carbon.co2Equivalent,
-      recommendations: a.recommendations,
-      soilStatus: {},
-      source: 'mock',
-    );
-  }
+  /// Returns a zero-value result when sensor is not connected.
+  SensorResult disconnectedResult() => const SensorResult(
+    healthScore: 0, ndviProxy: 0,
+    n: 0, p: 0, k: 0, ph: 0, ec: 0, moisture: 0, temperature: 0,
+    carbon: 0, co2Equivalent: 0,
+    recommendations: ['Connect your sensor device to view live data.'],
+    soilStatus: {},
+    source: 'disconnected',
+  );
 }
 
 // ── Result model ─────────────────────────────────────────────────────────────
@@ -111,23 +103,21 @@ class SensorResult {
   });
 
   factory SensorResult.fromJson(Map<String, dynamic> j) {
-    final soil = (j['soil'] as Map?)?.cast<String, dynamic>() ?? {};
-    final carbonMap = (j['carbon'] as Map?)?.cast<String, dynamic>() ?? {};
     final recs = (j['recommendations'] as List?)?.cast<String>() ?? [];
     return SensorResult(
-      healthScore:    (j['health_score'] as num?)?.toDouble() ?? 0,
-      ndviProxy:      (j['ndvi_proxy']   as num?)?.toDouble() ?? 0,
-      n:              (soil['n']           as num?)?.toDouble() ?? 0,
-      p:              (soil['p']           as num?)?.toDouble() ?? 0,
-      k:              (soil['k']           as num?)?.toDouble() ?? 0,
-      ph:             (soil['ph']          as num?)?.toDouble() ?? 0,
-      ec:             (soil['ec']          as num?)?.toDouble() ?? 0,
-      moisture:       (soil['moisture']    as num?)?.toDouble() ?? 0,
-      temperature:    (soil['temperature'] as num?)?.toDouble() ?? 0,
-      carbon:         (carbonMap['carbon']         as num?)?.toDouble() ?? 0,
-      co2Equivalent:  (carbonMap['co2_equivalent'] as num?)?.toDouble() ?? 0,
+      healthScore:    (j['health_score']   as num?)?.toDouble() ?? 0,
+      ndviProxy:      (j['ndvi_proxy']     as num?)?.toDouble() ?? 0,
+      n:              (j['n']              as num?)?.toDouble() ?? 0,
+      p:              (j['p']              as num?)?.toDouble() ?? 0,
+      k:              (j['k']              as num?)?.toDouble() ?? 0,
+      ph:             (j['ph']             as num?)?.toDouble() ?? 0,
+      ec:             (j['ec']             as num?)?.toDouble() ?? 0,
+      moisture:       (j['moisture']       as num?)?.toDouble() ?? 0,
+      temperature:    (j['temperature']    as num?)?.toDouble() ?? 0,
+      carbon:         (j['carbon']         as num?)?.toDouble() ?? 0,
+      co2Equivalent:  (j['co2_equivalent'] as num?)?.toDouble() ?? 0,
       recommendations: recs,
-      soilStatus:     (j['soil_status'] as Map?)?.cast<String, dynamic>() ?? {},
+      soilStatus:     {},
       source:         j['source'] as String? ?? 'hardware',
     );
   }

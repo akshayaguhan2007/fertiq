@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../services/mock_data.dart';
 import 'cache_service.dart';
 
 // Get free key at openweathermap.org/api
@@ -107,12 +106,39 @@ class WeatherService {
       } catch (_) {}
     }
 
-    // Fallback to mock
-    return MockData.forecast.map((f) => WeatherDay(
-      date: f.date, temp: f.temp, rain: f.rain,
-      moisture: f.moisture, risk: f.risk,
-      humidity: 65.0, windSpeed: 12.0,
-    )).toList();
+    // Fallback: Open-Meteo free API (no key needed)
+    try {
+      final uri = Uri.parse(
+        'https://api.open-meteo.com/v1/forecast'
+        '?latitude=$lat&longitude=$lng'
+        '&daily=temperature_2m_max,precipitation_sum,relative_humidity_2m_mean,wind_speed_10m_max'
+        '&forecast_days=15&timezone=auto',
+      );
+      final res = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final daily = body['daily'] as Map<String, dynamic>;
+        final dates    = (daily['time']                       as List).cast<String>();
+        final temps    = (daily['temperature_2m_max']         as List).map((v) => (v as num?)?.toInt() ?? 30).toList();
+        final rains    = (daily['precipitation_sum']          as List).map((v) => (v as num?)?.toInt() ?? 0).toList();
+        final humidity = (daily['relative_humidity_2m_mean']  as List).map((v) => (v as num?)?.toDouble() ?? 65.0).toList();
+        final wind     = (daily['wind_speed_10m_max']         as List).map((v) => (v as num?)?.toDouble() ?? 10.0).toList();
+        final days = List.generate(dates.length, (i) {
+          final t = temps[i], r = rains[i];
+          final m = (humidity[i] * 0.45).toInt().clamp(15, 55);
+          final risk = t > 36 || r > 30 ? 'High' : t > 33 || r > 10 ? 'Med' : 'Low';
+          return WeatherDay(
+            date: DateTime.parse(dates[i]),
+            temp: t, rain: r, moisture: m,
+            risk: risk, humidity: humidity[i], windSpeed: wind[i],
+          );
+        });
+        await _cache.setWeather({'forecast': days.map((d) => d.toJson()).toList()});
+        return days;
+      }
+    } catch (_) {}
+
+    return [];
   }
 
   /// Overall 15-day climate risk summary

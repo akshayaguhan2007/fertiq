@@ -3,9 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-const String kApiBase = 'http://10.186.32.104:8000'; // real device — PC WiFi IP
-// Android emulator → use http://10.0.2.2:8000
-// Real Android device → use http://10.186.32.104:8000
+const String kApiBase = 'http://localhost:8000'; // adb reverse over USB
+
 
 class AuthService extends ChangeNotifier {
   AuthService._();
@@ -28,7 +27,24 @@ class AuthService extends ChangeNotifier {
     _userId = p.getString('userId');
     _name   = p.getString('name');
     _email  = p.getString('email');
+    // Validate token against backend — clear if expired
+    if (_token != null) {
+      try {
+        final res = await http.get(
+          Uri.parse('$kApiBase/profile'),
+          headers: {'Authorization': 'Bearer $_token'},
+        ).timeout(const Duration(seconds: 5));
+        if (res.statusCode == 401) await _clearAndNotify();
+      } catch (_) {
+        // Network unreachable — keep token, will fail gracefully later
+      }
+    }
     notifyListeners();
+  }
+
+  Future<void> _clearAndNotify() async {
+    _token = _userId = _name = _email = null;
+    await _savePrefs();
   }
 
   Future<void> _savePrefs() async {
@@ -52,7 +68,7 @@ class AuthService extends ChangeNotifier {
         Uri.parse('$kApiBase/auth/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'password': password, 'name': name}),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 30));
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (res.statusCode == 200) {
         _token  = data['token'];
@@ -75,7 +91,7 @@ class AuthService extends ChangeNotifier {
         Uri.parse('$kApiBase/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'password': password}),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 30));
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       if (res.statusCode == 200) {
         _token  = data['token'];

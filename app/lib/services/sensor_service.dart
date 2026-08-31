@@ -2,13 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'auth_service.dart';
 import 'cache_service.dart';
-
-// Set to your Raspberry Pi local IP and port
-// Pi must be running the FastAPI backend on port 8000
-const String _kPiHost = '192.168.1.100';
-const int    _kPiPort = 8000;
-const String _kPiBase = 'http://$_kPiHost:$_kPiPort';
 
 class LiveSensorData {
   final double n, p, k, ph, ec, moisture, temperature;
@@ -83,14 +78,15 @@ class SensorService {
   final _cache = CacheService();
   Timer? _pollTimer;
   final _controller = StreamController<LiveSensorData>.broadcast();
+  LiveSensorData? _lastGoodData;
 
   Stream<LiveSensorData> get stream => _controller.stream;
 
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 
-  /// Start polling Pi every [intervalSeconds] seconds
-  void startPolling({int intervalSeconds = 30}) {
+  /// Start polling every [intervalSeconds] seconds
+  void startPolling({int intervalSeconds = 2}) {
     _fetch();
     _pollTimer = Timer.periodic(Duration(seconds: intervalSeconds), (_) => _fetch());
   }
@@ -110,37 +106,35 @@ class SensorService {
     if (!_controller.isClosed) _controller.add(data);
   }
 
-  /// Single fetch — tries Pi, falls back to cache, then mock
+  /// Single fetch — tries /sensor/live (Neon DB via FastAPI), falls back to last reading
   Future<LiveSensorData> fetchOnce() async {
-    // 1. Try Raspberry Pi
+    // 1. Try FastAPI /sensor/live (reads latest row from Neon DB written by Pi)
     try {
-      final res = await http
-          .get(Uri.parse('$_kPiBase/sensor/latest/demo-farm-1'))
-          .timeout(const Duration(seconds: 5));
+      final res = await http.get(
+        Uri.parse('$kApiBase/sensor/live'),
+        headers: {'Authorization': 'Bearer ${AuthService.instance.token}'},
+      ).timeout(const Duration(seconds: 8));
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body) as Map<String, dynamic>;
-        if (!body.containsKey('error')) {
-          final soil = (body['soil'] as Map?)?.cast<String, dynamic>() ?? {};
-          final carbonMap = (body['carbon'] as Map?)?.cast<String, dynamic>() ?? {};
-          final data = LiveSensorData(
-            n: (soil['n'] as num?)?.toDouble() ?? 0,
-            p: (soil['p'] as num?)?.toDouble() ?? 0,
-            k: (soil['k'] as num?)?.toDouble() ?? 0,
-            ph: (soil['ph'] as num?)?.toDouble() ?? 7.0,
-            ec: (soil['ec'] as num?)?.toDouble() ?? 0,
-            moisture: (soil['moisture'] as num?)?.toDouble() ?? 0,
-            temperature: (soil['temperature'] as num?)?.toDouble() ?? 25,
-            healthScore: (body['health_score'] as num?)?.toDouble() ?? 0,
-            ndviProxy: (body['ndvi_proxy'] as num?)?.toDouble() ?? 0,
-            carbon: (carbonMap['carbon'] as num?)?.toDouble() ?? 0,
-            co2Equivalent: (carbonMap['co2_equivalent'] as num?)?.toDouble() ?? 0,
-            recommendations: (body['recommendations'] as List?)?.cast<String>() ?? [],
-            source: 'hardware', timestamp: DateTime.now(),
-          );
-          _isConnected = true;
-          await _cache.setSensor(data.toJson());
-          return data;
-        }
+        final data = LiveSensorData(
+          n:             (body['n']             as num?)?.toDouble() ?? 0,
+          p:             (body['p']             as num?)?.toDouble() ?? 0,
+          k:             (body['k']             as num?)?.toDouble() ?? 0,
+          ph:            (body['ph']            as num?)?.toDouble() ?? 7.0,
+          ec:            (body['ec']            as num?)?.toDouble() ?? 0,
+          moisture:      (body['moisture']      as num?)?.toDouble() ?? 0,
+          temperature:   (body['temperature']   as num?)?.toDouble() ?? 25,
+          healthScore:   (body['health_score']  as num?)?.toDouble() ?? 0,
+          ndviProxy:     (body['ndvi_proxy']    as num?)?.toDouble() ?? 0,
+          carbon:        (body['carbon']        as num?)?.toDouble() ?? 0,
+          co2Equivalent: (body['co2_equivalent'] as num?)?.toDouble() ?? 0,
+          recommendations: (body['recommendations'] as List?)?.cast<String>() ?? [],
+          source: 'hardware', timestamp: DateTime.now(),
+        );
+        _isConnected = true;
+        _lastGoodData = data;
+        await _cache.setSensor(data.toJson());
+        return data;
       }
     } on SocketException {
       _isConnected = false;
@@ -148,13 +142,28 @@ class SensorService {
       _isConnected = false;
     }
 
-    // 2. Try cache
-    final cached = await _cache.getSensor();
-    if (cached != null) {
-      return LiveSensorData.fromJson(cached, 'cache');
+    // 2. Sensor offline — return last good reading with source 'last'
+    if (_lastGoodData != null) {
+      return LiveSensorData(
+        n: _lastGoodData!.n, p: _lastGoodData!.p, k: _lastGoodData!.k,
+        ph: _lastGoodData!.ph, ec: _lastGoodData!.ec,
+        moisture: _lastGoodData!.moisture, temperature: _lastGoodData!.temperature,
+        healthScore: _lastGoodData!.healthScore, ndviProxy: _lastGoodData!.ndviProxy,
+        carbon: _lastGoodData!.carbon, co2Equivalent: _lastGoodData!.co2Equivalent,
+        recommendations: _lastGoodData!.recommendations,
+        source: 'last', timestamp: _lastGoodData!.timestamp,
+      );
     }
 
-    // 3. Disconnected — return zeros
+    // 3. Try persistent cache (app restart with no sensor yet)
+    final cached = await _cache.getSensor();
+    if (cached != null) {
+      final d = LiveSensorData.fromJson(cached, 'last');
+      _lastGoodData = d;
+      return d;
+    }
+
+    // 4. Never had a reading — return zeros
     return LiveSensorData.disconnected();
   }
 }

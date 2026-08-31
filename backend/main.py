@@ -19,8 +19,19 @@ except Exception:
 
 load_dotenv()
 
-DB_PATH = os.getenv("DB_PATH", "cropplus.db")
+DB_PATH    = os.getenv("DB_PATH", "cropplus.db")
 JWT_SECRET = os.getenv("JWT_SECRET", secrets.token_hex(32))
+MONGO_URI  = os.getenv("MONGO_URI", "")
+
+# Persistent MongoDB client (reused across requests)
+from pymongo import MongoClient as _MongoClient
+_mongo_client: _MongoClient | None = None
+
+def _get_sensor_col():
+    global _mongo_client
+    if _mongo_client is None:
+        _mongo_client = _MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    return _mongo_client["CropHealth"]["sensor_data"]
 
 
 # ── Database ──────────────────────────────────────────────────────────────────
@@ -129,7 +140,7 @@ def _hash(password: str) -> str:
 
 def _new_token(user_id: str) -> str:
     token = secrets.token_urlsafe(32)
-    expires = (datetime.datetime.utcnow() + datetime.timedelta(days=30)).isoformat()
+    expires = (datetime.datetime.utcnow() + datetime.timedelta(days=365)).isoformat()
     conn = get_db()
     conn.execute("INSERT INTO tokens VALUES (?,?,?)", (token, user_id, expires))
     conn.commit()
@@ -225,7 +236,7 @@ class SimulateRequest(BaseModel):
     soil_type: str = ""
     area_ha: float = Field(default=1.0, gt=0)
     days: int = Field(default=0, ge=0, le=90)
-    seed: int | None = None
+    seed: Optional[int] = None
 
 class SensorReadingRequest(BaseModel):
     farm_id: str
@@ -236,7 +247,7 @@ class SensorReadingRequest(BaseModel):
     temperature: float = Field(ge=-10, le=60)
     ec: float          = Field(ge=0, le=10)
     ph: float          = Field(ge=3, le=10)
-    timestamp: str | None = None
+    timestamp: Optional[str] = None
     source: str = "hardware"
 
 
@@ -553,7 +564,7 @@ def fertilizer(req: FertilizerRequest, user_id: str = Depends(get_current_user))
 
 
 @app.get("/simulate/analysis")
-def simulate_analysis(crop_type: str = "", soil_type: str = "", seed: int | None = None):
+def simulate_analysis(crop_type: str = "", soil_type: str = "", seed: Optional[int] = None):
     sim  = SensorSimulator(seed=seed)
     calc = CarbonCalculator()
     soil = sim.generate_soil_data(soil_type or None)
@@ -572,6 +583,150 @@ def _recommendations(ndvi: float) -> list[str]:
                             "Monitor for pest or disease outbreak."]
     if ndvi < 0.6: return ["Good crop health. Maintain current irrigation schedule."]
     return ["Excellent vegetation density. Farm is sequestering carbon effectively."]
+
+
+def _row_to_carbon(r: dict, calc: CarbonCalculator) -> dict:
+    """Convert a raw MongoDB sensor row to a carbon-enriched dict."""
+    n  = float(r.get("nitrogen",    0))
+    p  = float(r.get("phosphorus",  0))
+    k  = float(r.get("potassium",   0))
+    ph = float(r.get("ph",          7.0))
+    ec = float(r.get("ec",          0)) / 1000.0  # µS/cm → mS/cm
+    moisture    = float(r.get("moisture",    0))
+    temperature = float(r.get("temperature", 25))
+    ph_score       = 1.0 - abs(ph - 6.5) / 3.5
+    n_score        = min(1.0, n / 80.0)
+    moisture_score = min(1.0, moisture / 40.0)
+    ndvi_proxy = round((ph_score * 0.3 + n_score * 0.4 + moisture_score * 0.3) * 0.85, 3)
+    carbon     = calc.calculate_carbon(ndvi_proxy, "default")
+    ts = r.get("timestamp")
+    return {
+        "n": n, "p": p, "k": k, "ph": ph, "ec": ec,
+        "moisture": moisture, "temperature": temperature,
+        "ndvi_proxy": ndvi_proxy,
+        "carbon": carbon["carbon"],
+        "co2_equivalent": carbon["co2_equivalent"],
+        "timestamp": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+    }
+
+
+@app.get("/sensor/history")
+def sensor_history(limit: int = 50, user_id: str = Depends(get_current_user)):
+    """Return last N sensor readings oldest-first for trend charts."""
+    try:
+        rows = list(_get_sensor_col().find(
+            {"nitrogen": {"$exists": True}},
+            sort=[("timestamp", -1)],
+            limit=limit,
+        ))
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"DB error: {e}")
+    calc = CarbonCalculator()
+    return [_row_to_carbon(r, calc) for r in reversed(rows)]
+
+
+@app.get("/ndvi")
+def get_ndvi(
+    lat: float, lng: float,
+    start_date: str = "", end_date: str = "",
+    user_id: str = Depends(get_current_user),
+):
+    import requests as _req, datetime as _dt
+    if not end_date:
+        end_date = _dt.date.today().isoformat()
+    if not start_date:
+        start_date = (_dt.date.today() - _dt.timedelta(days=30)).isoformat()
+
+    def _build(ndvi: float, src: str, date: str) -> dict:
+        biomass = max(0.0, 3.05 * ndvi - 0.35)
+        carbon  = round(biomass * 0.45, 3)
+        co2e    = round(carbon  * 3.67, 3)
+        credits = co2e  # 1 credit = 1 ton CO₂e sequestered
+        return {
+            "ndvi": round(ndvi, 4), "biomass": round(biomass, 3),
+            "carbon": carbon, "co2e": co2e,
+            "carbon_credits": credits,
+            "farmer_payment": None,  # computed client-side from live market price
+            "health_score": round(min(100.0, ndvi * 100), 1),
+            "date": date, "source": src, "lat": lat, "lng": lng,
+        }
+
+    # 1. Open-Meteo — real weather/soil data per location (free, no key)
+    try:
+        url = (
+            f"https://archive-api.open-meteo.com/v1/archive"
+            f"?latitude={lat}&longitude={lng}"
+            f"&start_date={start_date}&end_date={end_date}"
+            f"&daily=et0_fao_evapotranspiration,precipitation_sum,soil_moisture_0_to_7cm_mean"
+            f"&timezone=auto"
+        )
+        r = _req.get(url, timeout=15)
+        if r.status_code == 200:
+            d = r.json().get("daily", {})
+            et0_l  = [v for v in (d.get("et0_fao_evapotranspiration") or []) if v is not None]
+            rain_l = [v for v in (d.get("precipitation_sum")          or []) if v is not None]
+            soil_l = [v for v in (d.get("soil_moisture_0_to_7cm_mean") or []) if v is not None]
+            if et0_l and rain_l:
+                avg_et0  = sum(et0_l)  / len(et0_l)
+                avg_rain = sum(rain_l) / len(rain_l)
+                avg_soil = sum(soil_l) / len(soil_l) if soil_l else 0.25
+                wai  = min(1.0, (avg_rain + avg_soil * 10) / (avg_et0 * 2 + 0.001))
+                ndvi = 0.1 + wai * 0.8
+                dates = d.get("time") or []
+                result = _build(ndvi, "open-meteo", dates[-1] if dates else end_date)
+                return result
+    except Exception as e:
+        print(f"[NDVI] open-meteo error: {e}")
+
+    # 2. Sensor fallback
+    try:
+        row = _get_sensor_col().find_one({"nitrogen": {"$exists": True}}, sort=[("timestamp", -1)])
+        if row:
+            n  = float(row.get("nitrogen", 0))
+            ph = float(row.get("ph", 7.0))
+            moisture = float(row.get("moisture", 0))
+            ph_s = 1.0 - abs(ph - 6.5) / 3.5
+            n_s  = min(1.0, n / 80.0)
+            m_s  = min(1.0, moisture / 40.0)
+            ndvi = round((ph_s * 0.3 + n_s * 0.4 + m_s * 0.3) * 0.85, 4)
+            return _build(ndvi, "sensor", _dt.date.today().isoformat())
+    except Exception as e:
+        print(f"[NDVI] sensor fallback error: {e}")
+
+    raise HTTPException(status_code=503, detail="NDVI unavailable")
+
+
+@app.get("/sensor/live")
+def sensor_live(user_id: str = Depends(get_current_user)):
+    try:
+        _row = _get_sensor_col().find_one({"nitrogen": {"$exists": True}}, sort=[("timestamp", -1)])
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"DB error: {e}")
+    if not _row:
+        raise HTTPException(status_code=404, detail="No sensor data yet")
+    n           = float(_row.get("nitrogen",    0))
+    p           = float(_row.get("phosphorus",  0))
+    k           = float(_row.get("potassium",   0))
+    ph          = float(_row.get("ph",          7.0))
+    ec          = float(_row.get("ec",          0)) / 1000.0  # µS/cm → mS/cm
+    moisture    = float(_row.get("moisture",    0))
+    temperature = float(_row.get("temperature", 25))
+    calc = CarbonCalculator()
+    ph_score       = 1.0 - abs(ph - 6.5) / 3.5
+    n_score        = min(1.0, n / 80.0)
+    moisture_score = min(1.0, moisture / 40.0)
+    ndvi_proxy   = round((ph_score * 0.3 + n_score * 0.4 + moisture_score * 0.3) * 0.85, 3)
+    health_score = round(min(100.0, ndvi_proxy * 120), 1)
+    carbon       = calc.calculate_carbon(ndvi_proxy, "default")
+    ts     = _row.get("timestamp")
+    ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+    return {
+        "n": n, "p": p, "k": k, "ph": ph, "ec": ec,
+        "moisture": moisture, "temperature": temperature,
+        "health_score": health_score, "ndvi_proxy": ndvi_proxy,
+        "carbon": carbon["carbon"], "co2_equivalent": carbon["co2_equivalent"],
+        "recommendations": [], "source": "hardware", "timestamp": ts_str,
+    }
 
 
 def _sensor_recommendations(req: SensorReadingRequest, ndvi: float) -> list[str]:

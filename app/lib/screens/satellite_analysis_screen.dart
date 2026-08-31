@@ -8,8 +8,8 @@ import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import '../services/app_strings.dart';
 import '../services/satellite_service.dart';
+import '../services/sensor_service.dart';
 import '../services/gemini_service.dart';
-import '../services/mock_data.dart';
 import '../theme.dart';
 
 const _crops  = ['Rice', 'Wheat', 'Maize', 'Cotton', 'Sugarcane', 'Soybean'];
@@ -41,6 +41,7 @@ class _SatelliteAnalysisScreenState extends State<SatelliteAnalysisScreen> {
   String _loadStep   = '';
   SatelliteResult?        _result;
   GeminiRecommendations?  _recs;
+  LiveSensorData?         _sensorData;
 
   // ── Live location ──────────────────────────────────────────────────────────
   Future<void> _goToLiveLocation() async {
@@ -83,24 +84,28 @@ class _SatelliteAnalysisScreenState extends State<SatelliteAnalysisScreen> {
       _loadStep = AppStrings.of(context).fetchingSentinel;
     });
 
+    final svc = SensorService();
+    final sensor = await svc.fetchOnce();
+    svc.dispose();
+    setState(() => _sensorData = sensor);
+
     final result = await _satellite.fetchNDVI(
       lat: _pinned.latitude,
       lng: _pinned.longitude,
       radiusMeters: 500,
       startDate: DateFormat('yyyy-MM-dd').format(_from),
       endDate:   DateFormat('yyyy-MM-dd').format(_to),
+      sensorNdvi: sensor.ndviProxy > 0 ? sensor.ndviProxy : null,
     );
 
     setState(() => _loadStep = AppStrings.of(context).runningAI);
 
-    final soil = MockData.soilReading;
     final recs = await _gemini.getRecommendations(
       cropType: _crop, growthStage: _stage,
       ndvi: result.ndvi, biomass: result.biomass, carbon: result.carbon,
-      soilN: soil.n, soilP: soil.p, soilK: soil.k,
-      district: MockData.farmer.district,
-      weatherSummary:
-          '${MockData.forecast.first.temp}°C, rain: ${MockData.forecast.first.rain}mm',
+      soilN: sensor.n, soilP: sensor.p, soilK: sensor.k,
+      district: '',
+      weatherSummary: 'Temp: ${sensor.temperature.toStringAsFixed(1)}°C, Moisture: ${sensor.moisture.toStringAsFixed(1)}%',
     );
 
     setState(() { _loading = false; _result = result; _recs = recs; });
@@ -169,6 +174,7 @@ class _SatelliteAnalysisScreenState extends State<SatelliteAnalysisScreen> {
               crop: _crop,
               stage: _stage,
               pinned: _pinned,
+              sensor: _sensorData,
               onRescan: () => setState(() { _result = null; _recs = null; }),
             )
           : _buildInputView(),
@@ -393,12 +399,13 @@ class _ResultView extends StatelessWidget {
   final GeminiRecommendations? recs;
   final String crop, stage;
   final LatLng pinned;
+  final LiveSensorData? sensor;
   final VoidCallback onRescan;
 
   const _ResultView({
     required this.result, required this.recs,
     required this.crop, required this.stage,
-    required this.pinned, required this.onRescan,
+    required this.pinned, this.sensor, required this.onRescan,
   });
 
   @override
@@ -413,7 +420,9 @@ class _ResultView extends StatelessWidget {
         : result.healthScore > 40
             ? 'Moderate'
             : 'Stressed';
-    final ndviHistory = MockData.ndviHistory;
+    final ndviHistory = sensor != null && sensor!.ndviProxy > 0
+        ? List.generate(7, (i) => (sensor!.ndviProxy * (0.75 + i * 0.04)).clamp(0.0, 1.0))
+        : List.generate(7, (i) => (result.ndvi * (0.75 + i * 0.04)).clamp(0.0, 1.0));
 
     return ListView(children: [
       // ── Mini map showing selected location ────────────────
@@ -467,8 +476,10 @@ class _ResultView extends StatelessWidget {
             const SizedBox(width: 4),
             Text('Last pass: ${DateFormat('dd MMM yyyy').format(result.satelliteDate)}',
                 style: GoogleFonts.plusJakartaSans(fontSize: 11, color: kTextGrey)),
-            if (result.source == 'cache') ...[const SizedBox(width: 6), StatusBadge('CACHED', kAccentGold)]
-            else if (result.source == 'mock') ...[const SizedBox(width: 6), StatusBadge('DEMO', kAccentBlue)],
+            if (result.source == 'cache')     ...[const SizedBox(width: 6), StatusBadge('CACHED',    kAccentGold)]
+            else if (result.source == 'sensor')   ...[const SizedBox(width: 6), StatusBadge('SENSOR',    kAccentBlue)]
+            else if (result.source == 'estimated')...[const SizedBox(width: 6), StatusBadge('ESTIMATED', kAmber)]
+            else if (result.source == 'mock')     ...[const SizedBox(width: 6), StatusBadge('DEMO',      kRed)],
           ]),
         ]),
       ),
@@ -482,7 +493,7 @@ class _ResultView extends StatelessWidget {
             Text('$crop  ·  $stage',
                 style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w800, color: kTextDark)),
             const SizedBox(height: 4),
-            Text('${pinned.latitude.toStringAsFixed(4)}, ${pinned.longitude.toStringAsFixed(4)}  ·  Sentinel-2',
+            Text('${result.placeName.isNotEmpty ? result.placeName : '${pinned.latitude.toStringAsFixed(4)}, ${pinned.longitude.toStringAsFixed(4)}'}  ·  Sentinel-2',
                 style: GoogleFonts.plusJakartaSans(fontSize: 12, color: kTextGrey)),
             const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(color: kBorder)),
             Text(AppStrings.of(context).satelliteMetrics,

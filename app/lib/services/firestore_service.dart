@@ -19,19 +19,20 @@ class FirestoreService {
   Future<bool> profileExists() async {
     try {
       final res = await http.get(Uri.parse('$_base/profile'), headers: _headers)
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 5));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         return data['exists'] == true;
       }
     } catch (_) {}
-    return false;
+    // If backend unreachable, assume profile exists to avoid redirect loop
+    return true;
   }
 
   Future<Farmer?> getFarmer() async {
     try {
       final res = await http.get(Uri.parse('$_base/profile'), headers: _headers)
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 30));
       if (res.statusCode == 200) {
         final d = jsonDecode(res.body) as Map<String, dynamic>;
         if (d['exists'] != true) return null;
@@ -54,7 +55,7 @@ class FirestoreService {
     required List<String> crops,
     required String preferredLanguage,
   }) async {
-    await http.post(
+    final res = await http.post(
       Uri.parse('$_base/profile'),
       headers: _headers,
       body: jsonEncode({
@@ -62,7 +63,11 @@ class FirestoreService {
         'district': district, 'farm_size': farmSize,
         'crops': crops, 'preferred_language': preferredLanguage,
       }),
-    ).timeout(const Duration(seconds: 10));
+    ).timeout(const Duration(seconds: 30));
+    if (res.statusCode != 200) {
+      final detail = (jsonDecode(res.body) as Map<String, dynamic>)['detail'] ?? res.body;
+      throw Exception(detail);
+    }
   }
 
   // ── Farms ─────────────────────────────────────────────────────────────────
@@ -74,7 +79,7 @@ class FirestoreService {
   Future<List<Farm>> _fetchFarms() async {
     try {
       final res = await http.get(Uri.parse('$_base/farms'), headers: _headers)
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 30));
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;
         return list.map((e) => _farmFromMap(e as Map<String, dynamic>)).toList();
@@ -97,7 +102,7 @@ class FirestoreService {
   Future<List<Analysis>> _fetchAnalyses(String farmId) async {
     try {
       final res = await http.get(Uri.parse('$_base/analyses/$farmId'), headers: _headers)
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 30));
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;
         return list.map((e) => _analysisFromMap(e as Map<String, dynamic>)).toList();
@@ -116,7 +121,7 @@ class FirestoreService {
   Stream<List<CarbonCredit>> carbonCreditsStream() async* {
     try {
       final res = await http.get(Uri.parse('$_base/carbon-credits'), headers: _headers)
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 30));
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;
         yield list.map((e) => _creditFromMap(e as Map<String, dynamic>)).toList();
@@ -131,7 +136,7 @@ class FirestoreService {
   Stream<List<ClimateAlert>> climateAlertsStream(String farmId) async* {
     try {
       final res = await http.get(Uri.parse('$_base/climate-alerts/$farmId'), headers: _headers)
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 30));
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;
         yield list.map((e) => _alertFromMap(e as Map<String, dynamic>)).toList();
@@ -146,7 +151,7 @@ class FirestoreService {
   Stream<List<Payment>> paymentsStream() async* {
     try {
       final res = await http.get(Uri.parse('$_base/payments'), headers: _headers)
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 30));
       if (res.statusCode == 200) {
         final list = jsonDecode(res.body) as List;
         yield list.map((e) => _paymentFromMap(e as Map<String, dynamic>)).toList();
