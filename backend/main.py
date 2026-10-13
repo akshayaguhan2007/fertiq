@@ -32,7 +32,7 @@ def _get_sensor_col():
     global _mongo_client
     if _mongo_client is None:
         _mongo_client = _MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-    return _mongo_client[MONGO_DB]["sensor_data"]
+    return _mongo_client[MONGO_DB]["sensor_readings"]
 
 
 # ── Database ──────────────────────────────────────────────────────────────────
@@ -588,11 +588,11 @@ def _recommendations(ndvi: float) -> list[str]:
 
 def _row_to_carbon(r: dict, calc: CarbonCalculator) -> dict:
     """Convert a raw MongoDB sensor row to a carbon-enriched dict."""
-    n  = float(r.get("n", r.get("nitrogen", 0)))
-    p  = float(r.get("p", r.get("phosphorus", 0)))
-    k  = float(r.get("k", r.get("potassium", 0)))
+    n  = float(r.get("nitrogen",    0))
+    p  = float(r.get("phosphorus",  0))
+    k  = float(r.get("potassium",   0))
     ph = float(r.get("ph",          7.0))
-    ec = float(r.get("ec", 0))  # µS/cm → mS/cm
+    ec = float(r.get("ec",          0))
     moisture    = float(r.get("moisture",    0))
     temperature = float(r.get("temperature", 25))
     ph_score       = 1.0 - abs(ph - 6.5) / 3.5
@@ -616,7 +616,7 @@ def sensor_history(limit: int = 50, user_id: str = Depends(get_current_user)):
     """Return last N sensor readings oldest-first for trend charts."""
     try:
         rows = list(_get_sensor_col().find(
-            {"n": {"$exists": True}},
+            {"nitrogen": {"$exists": True}},
             sort=[("timestamp", -1)],
             limit=limit,
         ))
@@ -681,9 +681,9 @@ def get_ndvi(
 
     # 2. Sensor fallback
     try:
-        row = _get_sensor_col().find_one({"n": {"$exists": True}}, sort=[("timestamp", -1)])
+        row = _get_sensor_col().find_one({"nitrogen": {"$exists": True}}, sort=[("timestamp", -1)])
         if row:
-            n  = float(row.get("n", row.get("nitrogen", 0)))
+            n  = float(row.get("nitrogen", 0))
             ph = float(row.get("ph", 7.0))
             moisture = float(row.get("moisture", 0))
             ph_s = 1.0 - abs(ph - 6.5) / 3.5
@@ -700,14 +700,14 @@ def get_ndvi(
 @app.get("/sensor/live")
 def sensor_live(user_id: str = Depends(get_current_user)):
     try:
-        _row = _get_sensor_col().find_one({"n": {"$exists": True}}, sort=[("timestamp", -1)])
+        _row = _get_sensor_col().find_one({"nitrogen": {"$exists": True}}, sort=[("timestamp", -1)])
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"DB error: {e}")
     if not _row:
         raise HTTPException(status_code=404, detail="No sensor data yet")
-    n           = float(_row.get("n", _row.get("n", row.get("nitrogen", 0))))
-    p           = float(_row.get("p", _row.get("phosphorus", 0)))
-    k           = float(_row.get("k", _row.get("potassium", 0)))
+    n           = float(_row.get("nitrogen",    0))
+    p           = float(_row.get("phosphorus",  0))
+    k           = float(_row.get("potassium",   0))
     ph          = float(_row.get("ph",          7.0))
     ec          = float(_row.get("ec", 0))  # µS/cm → mS/cm
     moisture    = float(_row.get("moisture",    0))
