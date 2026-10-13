@@ -151,6 +151,7 @@ class _LiveHeroBannerState extends State<_LiveHeroBanner> {
   @override
   void initState() {
     super.initState();
+    _data = _svc.lastData;
     _svc.startPolling();
     _svc.stream.listen((d) { if (mounted) setState(() => _data = d); });
   }
@@ -198,25 +199,6 @@ class _LiveHeroBannerState extends State<_LiveHeroBanner> {
               children: [
                 Row(children: [
                   StatusBadge(label, color),
-                  if (isLast) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(children: [
-                        const Icon(Icons.history_rounded, color: Colors.white70, size: 11),
-                        const SizedBox(width: 3),
-                        Text('Last reading', style: GoogleFonts.plusJakartaSans(
-                            color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600)),
-                      ]),
-                    ),
-                  ] else if (!connected) ...[
-                    const SizedBox(width: 8),
-                    const Icon(Icons.wifi_off_rounded, color: Colors.white54, size: 14),
-                  ],
                 ]),
                 const SizedBox(height: 2),
                 Text(AppStrings.of(context).cropHealth, style: GoogleFonts.plusJakartaSans(
@@ -431,6 +413,7 @@ class _AlertsSectionState extends State<_AlertsSection> {
   @override
   void initState() {
     super.initState();
+    _alerts = _svc.lastData?.alerts ?? [];
     _svc.startPolling();
     _svc.stream.listen((d) { if (mounted) setState(() => _alerts = d.alerts); });
   }
@@ -514,6 +497,7 @@ class _LiveSoilStatsRowState extends State<_LiveSoilStatsRow> {
   @override
   void initState() {
     super.initState();
+    _data = _svc.lastData;
     _svc.startPolling();
     _svc.stream.listen((d) { if (mounted) setState(() => _data = d); });
   }
@@ -536,26 +520,6 @@ class _LiveSoilStatsRowState extends State<_LiveSoilStatsRow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (isLast)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(children: [
-                const Icon(Icons.history_rounded, color: kTextGrey, size: 14),
-                const SizedBox(width: 6),
-                Text('Sensor offline — showing last reading', style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12, color: kTextGrey)),
-              ]),
-            )
-          else if (!isLive)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(children: [
-                const Icon(Icons.wifi_off_rounded, color: kTextGrey, size: 14),
-                const SizedBox(width: 6),
-                Text(AppStrings.of(context).sensorNotConnected, style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12, color: kTextGrey)),
-              ]),
-            ),
           Row(children: [
             _SoilBox('N',   '${n.round()}',              'ppm', kPrimary),
             const SizedBox(width: 10),
@@ -620,6 +584,9 @@ class _NdviChartState extends State<_NdviChart> {
   }
 
   Future<void> _load() async {
+    _ndvi      = _svc.lastData?.ndviProxy ?? 0;
+    _source    = _svc.lastData?.source ?? '';
+    _connected = _source == 'hardware' || _source == 'last';
     _svc.startPolling();
     _svc.stream.listen((d) {
       if (mounted) {

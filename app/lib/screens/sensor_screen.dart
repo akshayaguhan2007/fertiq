@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../services/api_service.dart';
+import '../services/sensor_service.dart';
 import '../services/app_strings.dart';
 import '../theme.dart';
 
@@ -11,25 +11,23 @@ class SensorScreen extends StatefulWidget {
 }
 
 class _SensorScreenState extends State<SensorScreen> {
-  final _api = ApiService();
-  SensorResult? _result;
+  final _svc = SensorService();
+  LiveSensorData? _result;
   bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    _fetch();
+    _result = _svc.lastData;
+    _svc.startPolling();
+    _svc.stream.listen((d) { if (mounted) setState(() { _result = d; _loading = false; }); });
+    if (_result == null) _fetch();
   }
 
   Future<void> _fetch() async {
     setState(() => _loading = true);
-    try {
-      final r = await _api.fetchLatestReading('demo-farm-1')
-          ?? _api.disconnectedResult();
-      if (mounted) setState(() { _result = r; _loading = false; });
-    } catch (_) {
-      if (mounted) setState(() { _result = _api.disconnectedResult(); _loading = false; });
-    }
+    final r = await _svc.fetchOnce();
+    if (mounted) setState(() { _result = r; _loading = false; });
   }
 
   @override
@@ -110,8 +108,7 @@ class _SourceBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final live = source == 'hardware';
-    final disconnected = source == 'disconnected';
-    final color = live ? kGreenSoft : disconnected ? kRed : kAmber;
+    final color = live ? kGreenSoft : kAmber;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -127,13 +124,11 @@ class _SourceBar extends StatelessWidget {
               boxShadow: [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 4)]),
           ),
           const SizedBox(width: 10),
-          Text(
-            live ? 'Live — Raspberry Pi'
-                : disconnected ? 'Sensor not connected — connect Pi for live readings'
-                : 'Last reading — sensor offline',
-            style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+          Flexible(child: Text(
+            live ? 'Live — Raspberry Pi' : 'Last reading',
+            style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: color))),
           const Spacer(),
-          Text(live ? 'LIVE' : disconnected ? 'OFFLINE' : 'CACHED',
+          Text(live ? 'LIVE' : 'CACHED',
               style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
         ],
       ),
@@ -152,7 +147,7 @@ class _SectionTitle extends StatelessWidget {
 // ── Health header ─────────────────────────────────────────────────────────────
 
 class _HealthHeader extends StatelessWidget {
-  final SensorResult result;
+  final LiveSensorData result;
   const _HealthHeader({required this.result});
 
   @override
@@ -200,8 +195,6 @@ class _HealthHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('SOIL HEALTH SCORE', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w700, color: kTextGrey, letterSpacing: 1.1)),
-                const SizedBox(height: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
@@ -238,7 +231,7 @@ class _MiniStat extends StatelessWidget {
 // ── NPK row ───────────────────────────────────────────────────────────────────
 
 class _NpkRow extends StatelessWidget {
-  final SensorResult result;
+  final LiveSensorData result;
   const _NpkRow({required this.result});
   @override
   Widget build(BuildContext context) => Row(
@@ -320,7 +313,7 @@ class _NpkTile extends StatelessWidget {
 // ── Env grid ──────────────────────────────────────────────────────────────────
 
 class _EnvGrid extends StatelessWidget {
-  final SensorResult result;
+  final LiveSensorData result;
   const _EnvGrid({required this.result});
 
   @override
@@ -414,7 +407,7 @@ class _EnvTile extends StatelessWidget {
 // ── Carbon banner ─────────────────────────────────────────────────────────────
 
 class _CarbonBanner extends StatelessWidget {
-  final SensorResult result;
+  final LiveSensorData result;
   const _CarbonBanner({required this.result});
 
   @override
